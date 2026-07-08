@@ -82,7 +82,7 @@ class Analise(Base):
     credenciamento_viavel: Mapped[bool] = mapped_column(Boolean, default=True)
     credenciamento_analise: Mapped[str] = mapped_column(Text, default="")     # Análise Preliminar de Credenciamento
     alertas_impugnacao: Mapped[list | None] = mapped_column(JSON, nullable=True)
-    custo_emissao_cartoes: Mapped[str] = mapped_column(String(200), default="")  # "X × R$ 5,00 = R$ Y,00"
+    custo_emissao_cartoes: Mapped[str] = mapped_column(Text, default="")  # "X × R$ 5,00 = R$ Y,00" (texto livre da IA)
     analise_completa: Mapped[str] = mapped_column(Text, default="")           # texto integral (tabelas + seções)
     objeto_resumido: Mapped[str] = mapped_column(Text, default="")
     prazos: Mapped[list | None] = mapped_column(JSON, nullable=True)
