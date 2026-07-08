@@ -1,8 +1,9 @@
+import logging
 import secrets
 from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Form, Header, HTTPException, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, Form, Header, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -12,6 +13,8 @@ from ..database import get_db
 from ..models import Analise, DocumentoAnexo, Licitacao, Oportunidade, PerfilEmpresa
 from ..services import pipeline
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/api")
 
 # Rotas SEM cookie de sessão (autenticação própria por token) — incluídas no
@@ -19,18 +22,33 @@ router = APIRouter(prefix="/api")
 cron_router = APIRouter(prefix="/api")
 
 
-@cron_router.post("/pipeline/executar-cron")
+def _pipeline_em_background(dias: int, limite_analises: int) -> None:
+    """Roda o pipeline com sessão própria (a da requisição já terá sido fechada)."""
+    from ..database import SessionLocal
+    db = SessionLocal()
+    try:
+        resultado = pipeline.executar_pipeline(db, dias=dias, limite_analises=limite_analises)
+        logger.info("Pipeline via cron concluído: %s", resultado)
+    except Exception:
+        logger.exception("Pipeline via cron falhou")
+    finally:
+        db.close()
+
+
+@cron_router.post("/pipeline/executar-cron", status_code=202)
 def executar_pipeline_cron(
+    tarefas: BackgroundTasks,
     dias: int = 3,
     limite_analises: int = 10,
     token: str | None = None,
     x_cron_token: str | None = Header(default=None),
-    db: Session = Depends(get_db),
 ):
-    """Roda o pipeline (coleta + análise IA) via cron externo, sem cookie de sessão.
+    """Dispara o pipeline (coleta + análise IA) via cron externo, sem cookie de sessão.
 
     Autenticação: header `X-Cron-Token` (ou query `?token=`) igual à env CRON_TOKEN.
     Se CRON_TOKEN não estiver configurado, a rota fica desabilitada (404).
+    Responde na hora (202) e roda o pipeline em segundo plano — a coleta completa
+    pode levar vários minutos, mais que o timeout dos serviços de cron gratuitos.
     Útil no Render free tier: a chamada externa também acorda o serviço.
     """
     if not settings.cron_token:
@@ -38,7 +56,8 @@ def executar_pipeline_cron(
     fornecido = x_cron_token or token or ""
     if not secrets.compare_digest(fornecido, settings.cron_token):
         raise HTTPException(401, "Token de cron inválido")
-    return pipeline.executar_pipeline(db, dias=dias, limite_analises=limite_analises)
+    tarefas.add_task(_pipeline_em_background, dias, limite_analises)
+    return {"status": "coleta iniciada em segundo plano", "dias": dias, "limite_analises": limite_analises}
 
 
 # ---------- Pipeline ----------
