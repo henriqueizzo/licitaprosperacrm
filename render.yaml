@@ -1,0 +1,35 @@
+# Blueprint do Render (https://render.com) — cria o serviço web gratuito do LicitaProsperaCRM.
+# Como usar: no painel do Render, New -> Blueprint -> selecione este repositório do GitHub.
+# O passo a passo completo está em DEPLOY.md.
+services:
+  - type: web
+    name: licitaprosperacrm
+    runtime: python
+    plan: free
+    # O ambiente Python do Render também traz Node.js, então o build instala o
+    # backend e compila o frontend num comando só. Se o build de Node falhar,
+    # defina a env NODE_VERSION (ex.: 20.11.0) — veja DEPLOY.md.
+    buildCommand: pip install -r backend/requirements.txt && cd frontend && npm ci && npm run build
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.10
+      # ----- Preencher no painel do Render (sync: false = valor secreto, não vai para o git) -----
+      - key: DATABASE_URL          # connection string do Supabase (pooler, modo session, porta 5432)
+        sync: false
+      - key: ANTHROPIC_API_KEY     # chave da API Anthropic (console.anthropic.com)
+        sync: false
+      - key: ADMIN_SENHA_INICIAL   # senha inicial do admin (troque no 1º acesso)
+        sync: false
+      - key: CRON_TOKEN            # token do cron externo (gere um valor longo e aleatório)
+        sync: false
+      # ----- Valores fixos -----
+      - key: ADMIN_EMAIL
+        value: admin@exemplo.com   # troque pelo seu email antes de aplicar o blueprint
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: FRONTEND_DIST
+        value: ../frontend/dist
+      - key: COLETA_INTERVALO_HORAS
+        value: "6"

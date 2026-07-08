@@ -1,16 +1,44 @@
+import secrets
 from urllib.parse import quote
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, Form, HTTPException, Response, UploadFile
+from fastapi import APIRouter, Depends, Form, Header, HTTPException, Response, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..config import settings
 from ..database import get_db
 from ..models import Analise, DocumentoAnexo, Licitacao, Oportunidade, PerfilEmpresa
 from ..services import pipeline
 
 router = APIRouter(prefix="/api")
+
+# Rotas SEM cookie de sessão (autenticação própria por token) — incluídas no
+# main.py sem a dependency `usuario_atual`.
+cron_router = APIRouter(prefix="/api")
+
+
+@cron_router.post("/pipeline/executar-cron")
+def executar_pipeline_cron(
+    dias: int = 3,
+    limite_analises: int = 10,
+    token: str | None = None,
+    x_cron_token: str | None = Header(default=None),
+    db: Session = Depends(get_db),
+):
+    """Roda o pipeline (coleta + análise IA) via cron externo, sem cookie de sessão.
+
+    Autenticação: header `X-Cron-Token` (ou query `?token=`) igual à env CRON_TOKEN.
+    Se CRON_TOKEN não estiver configurado, a rota fica desabilitada (404).
+    Útil no Render free tier: a chamada externa também acorda o serviço.
+    """
+    if not settings.cron_token:
+        raise HTTPException(404, "Not Found")
+    fornecido = x_cron_token or token or ""
+    if not secrets.compare_digest(fornecido, settings.cron_token):
+        raise HTTPException(401, "Token de cron inválido")
+    return pipeline.executar_pipeline(db, dias=dias, limite_analises=limite_analises)
 
 
 # ---------- Pipeline ----------

@@ -3,8 +3,12 @@ from sqlalchemy.orm import DeclarativeBase, sessionmaker
 
 from .config import settings
 
-connect_args = {"check_same_thread": False} if settings.database_url.startswith("sqlite") else {}
-engine = create_engine(settings.database_url, connect_args=connect_args)
+if settings.database_url.startswith("sqlite"):
+    engine = create_engine(settings.database_url, connect_args={"check_same_thread": False})
+else:
+    # Postgres (Supabase etc.): pool_pre_ping descarta conexões derrubadas pelo
+    # pooler/idle timeout antes de usá-las (evita erros após o serviço "acordar").
+    engine = create_engine(settings.database_url, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
@@ -13,24 +17,28 @@ class Base(DeclarativeBase):
 
 
 # Colunas adicionadas à tabela `analises` (análise Prospera Benefícios + Pagamentos).
-# ALTER TABLE ... ADD COLUMN funciona no SQLite e preserva os dados existentes.
-_MIGRACOES_ANALISES = {
-    "score_beneficios": "INTEGER NOT NULL DEFAULT 0",
-    "score_pagamentos": "INTEGER NOT NULL DEFAULT 0",
-    "classificacao_final": "VARCHAR(40) NOT NULL DEFAULT ''",
-    "credenciamento_viavel": "BOOLEAN NOT NULL DEFAULT 1",
-    "credenciamento_analise": "TEXT NOT NULL DEFAULT ''",
-    "alertas_impugnacao": "JSON",
-    "custo_emissao_cartoes": "VARCHAR(200) NOT NULL DEFAULT ''",
-    "analise_completa": "TEXT NOT NULL DEFAULT ''",
-    "documentos_habilitacao": "JSON",
-}
+# ALTER TABLE ... ADD COLUMN funciona no SQLite e no Postgres, preservando os dados.
+# O default do BOOLEAN é dialect-específico (SQLite usa 1, Postgres usa TRUE).
+def _migracoes_analises(dialeto: str) -> dict[str, str]:
+    bool_true = "1" if dialeto == "sqlite" else "TRUE"
+    return {
+        "score_beneficios": "INTEGER NOT NULL DEFAULT 0",
+        "score_pagamentos": "INTEGER NOT NULL DEFAULT 0",
+        "classificacao_final": "VARCHAR(40) NOT NULL DEFAULT ''",
+        "credenciamento_viavel": f"BOOLEAN NOT NULL DEFAULT {bool_true}",
+        "credenciamento_analise": "TEXT NOT NULL DEFAULT ''",
+        "alertas_impugnacao": "JSON",
+        "custo_emissao_cartoes": "VARCHAR(200) NOT NULL DEFAULT ''",
+        "analise_completa": "TEXT NOT NULL DEFAULT ''",
+        "documentos_habilitacao": "JSON",
+    }
 
 
 def migrar_esquema() -> list[str]:
     """Adiciona colunas novas em bancos já existentes, sem apagar dados.
 
-    Idempotente: só adiciona o que ainda não existe. Retorna a lista de colunas criadas.
+    Idempotente e dialect-aware (SQLite e Postgres): usa `sqlalchemy.inspect` para
+    a introspecção e só adiciona o que ainda não existe. Retorna as colunas criadas.
     """
     inspector = inspect(engine)
     if "analises" not in inspector.get_table_names():
@@ -38,7 +46,7 @@ def migrar_esquema() -> list[str]:
     existentes = {c["name"] for c in inspector.get_columns("analises")}
     criadas: list[str] = []
     with engine.begin() as conn:
-        for coluna, ddl in _MIGRACOES_ANALISES.items():
+        for coluna, ddl in _migracoes_analises(engine.dialect.name).items():
             if coluna not in existentes:
                 conn.execute(text(f"ALTER TABLE analises ADD COLUMN {coluna} {ddl}"))
                 criadas.append(coluna)

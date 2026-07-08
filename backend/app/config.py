@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -7,6 +8,20 @@ class Settings(BaseSettings):
     anthropic_api_key: str = ""
     conlicitacao_token: str = ""
     database_url: str = "sqlite:///./licitaprospera.db"
+
+    @field_validator("database_url")
+    @classmethod
+    def _normalizar_database_url(cls, v: str) -> str:
+        """Normaliza URLs de Postgres para o driver psycopg2.
+
+        Supabase/Render/Heroku às vezes fornecem `postgres://` (esquema antigo,
+        que o SQLAlchemy 2.x não aceita) ou `postgresql://` sem driver explícito.
+        """
+        if v.startswith("postgres://"):
+            return "postgresql+psycopg2://" + v[len("postgres://"):]
+        if v.startswith("postgresql://"):
+            return "postgresql+psycopg2://" + v[len("postgresql://"):]
+        return v
     coleta_intervalo_horas: int = 6
     score_minimo_oportunidade: int = 60
 
@@ -20,6 +35,14 @@ class Settings(BaseSettings):
     cookie_secure: bool = False
     # Validade da sessão de login, em dias
     sessao_dias: int = 7
+
+    # Token do endpoint POST /api/pipeline/executar-cron (para cron externo, ex.: cron-job.org).
+    # Vazio = rota desabilitada (retorna 404).
+    cron_token: str = ""
+
+    # Diretório do build do frontend (npm run build). Se existir, o FastAPI serve o
+    # SPA em produção. Relativo ao diretório backend/. Em dev (sem dist) nada muda.
+    frontend_dist: str = "../frontend/dist"
 
 
 settings = Settings()

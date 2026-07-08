@@ -1,13 +1,16 @@
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
+from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from .api.auth import router as auth_router
-from .api.routes import router
+from .api.routes import cron_router, router
 from .config import settings
 from .database import Base, SessionLocal, engine, migrar_esquema
 from .security import bootstrap_admin, usuario_atual
@@ -67,15 +70,63 @@ app.add_middleware(
 
 # /api/auth/* (login é aberto; me/logout/trocar-senha e /api/usuarios têm as
 # próprias dependencies) — as demais rotas /api/* exigem sessão válida.
+# cron_router: autenticação própria por token (X-Cron-Token), sem cookie.
 app.include_router(auth_router)
+app.include_router(cron_router)
 app.include_router(router, dependencies=[Depends(usuario_atual)])
 
 
-@app.get("/")
-def raiz():
-    return {
-        "app": "LICITAPROSPERACRM",
-        "docs": "/docs",
-        "ia_configurada": bool(settings.anthropic_api_key),
-        "conlicitacao_configurada": bool(settings.conlicitacao_token),
-    }
+# ---------- Frontend (produção): serve o build do Vite pelo próprio FastAPI ----------
+# Se frontend/dist existir (env FRONTEND_DIST, default ../frontend/dist relativo ao
+# backend), um único serviço atende API + SPA e o cookie de sessão fica same-origin.
+# Sem dist (dev local com Vite na 5173), o comportamento antigo é mantido.
+
+class _AssetsImutaveis(StaticFiles):
+    """Assets do Vite têm hash no nome — pode cachear 'para sempre'."""
+
+    def file_response(self, *args, **kwargs):
+        resposta = super().file_response(*args, **kwargs)
+        resposta.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return resposta
+
+
+def _dir_frontend_dist() -> Path | None:
+    dist = Path(settings.frontend_dist)
+    if not dist.is_absolute():
+        # relativo à pasta backend/ (pai do pacote app/), independente do cwd
+        dist = Path(__file__).resolve().parent.parent / dist
+    dist = dist.resolve()
+    return dist if (dist / "index.html").is_file() else None
+
+
+_FRONTEND_DIST = _dir_frontend_dist()
+
+if _FRONTEND_DIST:
+    if (_FRONTEND_DIST / "assets").is_dir():
+        app.mount("/assets", _AssetsImutaveis(directory=_FRONTEND_DIST / "assets"), name="assets")
+
+    @app.get("/{caminho:path}", include_in_schema=False)
+    def spa(caminho: str):
+        """Fallback SPA: arquivos reais do dist são servidos; o resto cai no index.html.
+
+        Rotas /api/* inexistentes continuam devolvendo 404 (não devolvem HTML).
+        """
+        if caminho == "api" or caminho.startswith("api/"):
+            raise HTTPException(404, "Not Found")
+        if caminho:
+            arquivo = (_FRONTEND_DIST / caminho).resolve()
+            # protege contra path traversal e só serve o que está dentro do dist
+            if arquivo.is_file() and arquivo.is_relative_to(_FRONTEND_DIST):
+                return FileResponse(arquivo)
+        return FileResponse(_FRONTEND_DIST / "index.html")
+
+    logger.info("Frontend (SPA) servido de %s", _FRONTEND_DIST)
+else:
+    @app.get("/")
+    def raiz():
+        return {
+            "app": "LICITAPROSPERACRM",
+            "docs": "/docs",
+            "ia_configurada": bool(settings.anthropic_api_key),
+            "conlicitacao_configurada": bool(settings.conlicitacao_token),
+        }
