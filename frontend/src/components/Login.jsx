@@ -27,7 +27,9 @@ export default function Login({ aoEntrar }) {
   return (
     <div className="login-fundo">
       <form className="login-card" onSubmit={entrar}>
-        <img src="/prospera-logo.png" alt="Próspera" className="login-logo" />
+        <span className="logo-chip login-logo-chip">
+          <img src="/prospera-logo.png" alt="Próspera" className="login-logo" />
+        </span>
         <p className="login-sub">CRM de Licitações</p>
         <label>
           Email

@@ -68,7 +68,9 @@ export default function App() {
     <div className="app">
       <header>
         <div className="marca">
-          <img src="/prospera-logo.png" alt="Próspera" className="logo" />
+          <span className="logo-chip">
+            <img src="/prospera-logo.png" alt="Próspera" className="logo" />
+          </span>
           <span className="marca-sub">CRM de Licitações</span>
         </div>
         <nav>

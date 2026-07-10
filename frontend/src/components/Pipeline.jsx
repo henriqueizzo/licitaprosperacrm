@@ -14,13 +14,29 @@ const ESTAGIOS = [
 const brl = (v) =>
   v == null ? '—' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+const brlCompacto = (v) =>
+  v.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL',
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  })
+
 export default function Pipeline() {
   const [ops, setOps] = useState([])
+  const [totalLicitacoes, setTotalLicitacoes] = useState(null)
   const [erro, setErro] = useState('')
   const [docsLic, setDocsLic] = useState(null) // licitação com modal de documentação aberto
 
   const carregar = () => api.oportunidades().then(setOps).catch((e) => setErro(e.message))
-  useEffect(() => { carregar() }, [])
+  useEffect(() => {
+    carregar()
+    api.licitacoes().then((ls) => setTotalLicitacoes(ls.length)).catch(() => {})
+  }, [])
+
+  const abertas = ops.filter((o) => o.estagio !== 'ganhou' && o.estagio !== 'perdeu')
+  const ganhas = ops.filter((o) => o.estagio === 'ganhou')
+  const valorEmDisputa = abertas.reduce((soma, o) => soma + (o.licitacao?.valor_estimado || 0), 0)
 
   async function mover(op, direcao) {
     const i = ESTAGIOS.findIndex((e) => e.id === op.estagio)
@@ -41,6 +57,28 @@ export default function Pipeline() {
         </div>
       </div>
     )}
+    <div className="cockpit">
+      <div className="tile">
+        <span className="tile-k"><span className="led" /> Licitações coletadas</span>
+        <span className="tile-v">{totalLicitacoes ?? '—'}</span>
+        <span className="tile-d">PNCP · FIESC · FIERGS · FIEMS · manual</span>
+      </div>
+      <div className="tile">
+        <span className="tile-k">Oportunidades ativas</span>
+        <span className="tile-v">{abertas.length}</span>
+        <span className="tile-d">no pipeline agora</span>
+      </div>
+      <div className="tile">
+        <span className="tile-k">Valor em disputa</span>
+        <span className="tile-v">{valorEmDisputa > 0 ? brlCompacto(valorEmDisputa) : '—'}</span>
+        <span className="tile-d">soma das oportunidades abertas</span>
+      </div>
+      <div className="tile">
+        <span className="tile-k">Ganhas</span>
+        <span className="tile-v">{ganhas.length}</span>
+        <span className="tile-d">contratos conquistados</span>
+      </div>
+    </div>
     <div className="kanban">
       {ESTAGIOS.map((est) => (
         <div key={est.id} className="coluna">
