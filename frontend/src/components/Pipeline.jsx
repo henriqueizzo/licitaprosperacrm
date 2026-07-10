@@ -24,19 +24,22 @@ const brlCompacto = (v) =>
 
 export default function Pipeline() {
   const [ops, setOps] = useState([])
-  const [totalLicitacoes, setTotalLicitacoes] = useState(null)
+  const [lics, setLics] = useState(null)
   const [erro, setErro] = useState('')
   const [docsLic, setDocsLic] = useState(null) // licitação com modal de documentação aberto
 
   const carregar = () => api.oportunidades().then(setOps).catch((e) => setErro(e.message))
   useEffect(() => {
     carregar()
-    api.licitacoes().then((ls) => setTotalLicitacoes(ls.length)).catch(() => {})
+    api.licitacoes().then(setLics).catch(() => {})
   }, [])
 
   const abertas = ops.filter((o) => o.estagio !== 'ganhou' && o.estagio !== 'perdeu')
   const ganhas = ops.filter((o) => o.estagio === 'ganhou')
+  const perdidas = ops.filter((o) => o.estagio === 'perdeu')
   const valorEmDisputa = abertas.reduce((soma, o) => soma + (o.licitacao?.valor_estimado || 0), 0)
+  const comOp = new Set(ops.map((o) => o.licitacao?.id).filter(Boolean))
+  const noGo = lics === null ? null : lics.filter((l) => !comOp.has(l.id)).length
 
   async function mover(op, direcao) {
     const i = ESTAGIOS.findIndex((e) => e.id === op.estagio)
@@ -60,8 +63,12 @@ export default function Pipeline() {
     <div className="cockpit">
       <div className="tile">
         <span className="tile-k"><span className="led" /> Licitações coletadas</span>
-        <span className="tile-v">{totalLicitacoes ?? '—'}</span>
-        <span className="tile-d">PNCP · FIESC · FIERGS · FIEMS · manual</span>
+        <span className="tile-v">{lics === null ? '—' : lics.length}</span>
+        <span className="tile-d">
+          {lics === null
+            ? 'PNCP · FIESC · FIERGS · FIEMS · manual'
+            : `${abertas.length} no pipeline · ${noGo} no go · ${ganhas.length + perdidas.length} finalizadas`}
+        </span>
       </div>
       <div className="tile">
         <span className="tile-k">Oportunidades ativas</span>
@@ -74,9 +81,16 @@ export default function Pipeline() {
         <span className="tile-d">soma das oportunidades abertas</span>
       </div>
       <div className="tile">
+        <span className="tile-k">No go</span>
+        <span className="tile-v">{noGo ?? '—'}</span>
+        <span className="tile-d">reprovadas — detalhes na aba No Go</span>
+      </div>
+      <div className="tile">
         <span className="tile-k">Ganhas</span>
         <span className="tile-v">{ganhas.length}</span>
-        <span className="tile-d">contratos conquistados</span>
+        <span className="tile-d">
+          contratos conquistados{perdidas.length > 0 ? ` · ${perdidas.length} perdida${perdidas.length > 1 ? 's' : ''}` : ''}
+        </span>
       </div>
     </div>
     <div className="kanban">

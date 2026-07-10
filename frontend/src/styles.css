@@ -199,7 +199,7 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 /* ---------- Cockpit (indicadores acima do kanban) ---------- */
 .cockpit {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 14px;
   margin-bottom: 16px;
 }
