@@ -347,6 +347,32 @@ class OportunidadePatch(BaseModel):
     responsavel: str | None = None
 
 
+class OportunidadeIn(BaseModel):
+    licitacao_id: int
+
+
+@router.post("/oportunidades", status_code=201)
+def criar_oportunidade(dados: OportunidadeIn, db: Session = Depends(get_db)):
+    """Cria manualmente uma oportunidade para uma licitação (aba No Go -> Pipeline).
+
+    Permite ao usuário discordar da IA e levar ao kanban uma licitação reprovada.
+    """
+    if not db.get(Licitacao, dados.licitacao_id):
+        raise HTTPException(404, "Licitação não encontrada")
+    existe = db.execute(
+        select(Oportunidade).where(Oportunidade.licitacao_id == dados.licitacao_id)
+    ).scalar_one_or_none()
+    if existe:
+        raise HTTPException(409, "Esta licitação já está no pipeline")
+    op = Oportunidade(
+        licitacao_id=dados.licitacao_id, estagio="identificada",
+        notas="Movida manualmente da aba No Go",
+    )
+    db.add(op)
+    db.commit()
+    return _oportunidade_out(op, db)
+
+
 @router.get("/oportunidades")
 def listar_oportunidades(estagio: str | None = None, db: Session = Depends(get_db)):
     q = select(Oportunidade).order_by(Oportunidade.atualizado_em.desc())

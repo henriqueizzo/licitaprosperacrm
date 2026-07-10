@@ -383,6 +383,10 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 .veredito.amarelo { background: var(--amarelo-fundo); color: var(--amarelo); border-color: var(--amarelo-borda); }
 .pendente { color: var(--gelo); font-family: var(--mono); font-size: 0.7rem; }
 
+/* Aba No Go */
+.acoes-nogo { display: inline-flex; gap: 6px; }
+.acoes-nogo button:disabled { opacity: 0.5; cursor: wait; }
+
 /* ---------- Formulários (Perfil / Cadastro Manual) ---------- */
 .perfil {
   background: var(--panel);

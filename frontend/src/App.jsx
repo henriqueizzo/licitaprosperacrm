@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import Pipeline from './components/Pipeline.jsx'
 import Licitacoes from './components/Licitacoes.jsx'
+import NoGo from './components/NoGo.jsx'
 import CadastroManual from './components/CadastroManual.jsx'
 import Perfil from './components/Perfil.jsx'
 import Usuarios from './components/Usuarios.jsx'
@@ -11,6 +12,7 @@ import { api, definirAo401 } from './api.js'
 const ABAS = [
   { id: 'pipeline', rotulo: 'Pipeline' },
   { id: 'licitacoes', rotulo: 'Licitações' },
+  { id: 'nogo', rotulo: 'No Go' },
   { id: 'cadastro', rotulo: 'Cadastro Manual' },
   { id: 'perfil', rotulo: 'Perfil da Empresa' },
 ]
@@ -125,6 +127,7 @@ export default function App() {
       <main>
         {aba === 'pipeline' && <Pipeline />}
         {aba === 'licitacoes' && <Licitacoes />}
+        {aba === 'nogo' && <NoGo />}
         {aba === 'cadastro' && <CadastroManual />}
         {aba === 'perfil' && <Perfil />}
         {aba === 'usuarios' && usuario.is_admin && <Usuarios usuarioLogado={usuario} />}
