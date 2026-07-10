@@ -23,7 +23,7 @@ def _job_pipeline():
     from .services.pipeline import executar_pipeline
     db = SessionLocal()
     try:
-        resultado = executar_pipeline(db)
+        resultado = executar_pipeline(db, gatilho="agendador")
         logger.info("Pipeline agendado executado: %s", resultado)
     finally:
         db.close()

@@ -164,6 +164,26 @@ button.primario:active:not(:disabled) { transform: translateY(1px); }
 button.primario:focus-visible { outline: none; box-shadow: var(--foco), var(--glow-azul); }
 button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 
+/* Ação de coleta + status (última/próxima) no cabeçalho */
+.acao-pipeline {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+.coleta-status {
+  font-family: var(--mono);
+  font-size: 0.62rem;
+  letter-spacing: 0.06em;
+  color: var(--texto-mudo);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 0.9em;
+}
+.coleta-status .led { width: 6px; height: 6px; }
+
 /* ---------- Banner de status ---------- */
 .banner {
   background: rgba(0, 80, 229, 0.1);
@@ -735,8 +755,51 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 @media (max-width: 900px) {
   .cockpit { grid-template-columns: repeat(2, 1fr); }
 }
+
 @media (max-width: 720px) {
   .app { padding: 12px; }
   .grade { grid-template-columns: 1fr; }
-  header { gap: 12px; }
+
+  /* Cabeçalho empilhado: marca+usuário / abas roláveis / botão de coleta */
+  header { gap: 10px; padding: 12px 14px; }
+  .marca { width: 100%; justify-content: space-between; }
+  .marca-sub { border-left: none; padding-left: 0; }
+  nav {
+    order: 3;
+    flex-basis: 100%;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  nav::-webkit-scrollbar { display: none; }
+  nav button { white-space: nowrap; flex: none; }
+  .acao-pipeline { order: 4; width: 100%; }
+  .acao-pipeline button.primario { width: 100%; padding: 12px 18px; }
+  .usuario-area { order: 2; margin-left: auto; border-left: none; padding-left: 0; }
+  .usuario-nome { display: none; }
+
+  /* Cockpit mais compacto */
+  .cockpit { gap: 10px; }
+  .tile { padding: 11px 13px 10px; }
+  .tile-v { font-size: 1.45rem; }
+
+  /* Kanban: colunas quase de tela cheia, deslize horizontal */
+  .coluna { min-width: 82vw; }
+  .cartao .acoes button, .cartao .acoes a { padding: 6px 12px; }
+
+  /* Tabelas roláveis na horizontal (Licitações, Usuários) */
+  .tabela { display: block; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tabela th, .tabela td { white-space: nowrap; }
+  .tabela td.objeto, .tabela .objeto { white-space: normal; min-width: 240px; max-width: 280px; }
+  .detalhe td { white-space: normal; }
+
+  /* Formulários e modais */
+  .perfil { padding: 16px; }
+  .modal-fundo { padding: 16px 8px; }
+  .docs { padding: 12px 12px; }
+  .docs-avulso-form input[type='text'] { min-width: 140px; }
+  .doc-anexo a { max-width: 160px; }
+  .login-card { padding: 28px 22px 24px; }
 }

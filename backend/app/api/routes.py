@@ -27,7 +27,7 @@ def _pipeline_em_background(dias: int, limite_analises: int) -> None:
     from ..database import SessionLocal
     db = SessionLocal()
     try:
-        resultado = pipeline.executar_pipeline(db, dias=dias, limite_analises=limite_analises)
+        resultado = pipeline.executar_pipeline(db, dias=dias, limite_analises=limite_analises, gatilho="cron")
         logger.info("Pipeline via cron concluído: %s", resultado)
     except Exception:
         logger.exception("Pipeline via cron falhou")
@@ -61,6 +61,36 @@ def executar_pipeline_cron(
 
 
 # ---------- Pipeline ----------
+
+@router.get("/pipeline/status")
+def status_pipeline(db: Session = Depends(get_db)):
+    """Última execução do pipeline e estimativa da próxima (última + intervalo).
+
+    Datas em UTC com sufixo Z — o frontend converte para o fuso local.
+    """
+    from datetime import timedelta
+
+    from ..models import ExecucaoPipeline
+
+    ultima = db.execute(
+        select(ExecucaoPipeline).order_by(ExecucaoPipeline.executado_em.desc()).limit(1)
+    ).scalar_one_or_none()
+
+    intervalo = settings.coleta_intervalo_horas
+    proxima = ultima.executado_em + timedelta(hours=intervalo) if (ultima and intervalo > 0) else None
+    return {
+        "intervalo_horas": intervalo,
+        "ultima_execucao": ultima.executado_em.isoformat() + "Z" if ultima else None,
+        "proxima_estimada": proxima.isoformat() + "Z" if proxima else None,
+        "ultimo_resultado": {
+            "gatilho": ultima.gatilho,
+            "novas_licitacoes": ultima.novas_licitacoes,
+            "analisadas": ultima.analisadas,
+            "oportunidades_criadas": ultima.oportunidades_criadas,
+            "erros": ultima.erros,
+        } if ultima else None,
+    }
+
 
 @router.post("/pipeline/executar")
 def executar_pipeline(dias: int = 3, limite_analises: int = 10, db: Session = Depends(get_db)):

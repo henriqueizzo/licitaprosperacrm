@@ -136,6 +136,23 @@ class Oportunidade(Base):
     licitacao: Mapped[Licitacao] = relationship(back_populates="oportunidade")
 
 
+class ExecucaoPipeline(Base):
+    """Registro de cada execução do pipeline (coleta + análise), por qualquer gatilho.
+
+    Alimenta o status "última coleta / próxima estimada" exibido no cabeçalho.
+    """
+
+    __tablename__ = "execucoes_pipeline"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    executado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    gatilho: Mapped[str] = mapped_column(String(20), default="manual")  # manual | agendador | cron
+    novas_licitacoes: Mapped[int] = mapped_column(Integer, default=0)
+    analisadas: Mapped[int] = mapped_column(Integer, default=0)
+    oportunidades_criadas: Mapped[int] = mapped_column(Integer, default=0)
+    erros: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class PerfilEmpresa(Base):
     """Perfil da empresa usado pela IA para pontuar aderência (registro único, id=1)."""
 

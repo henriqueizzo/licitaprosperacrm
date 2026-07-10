@@ -38,6 +38,7 @@ export const api = {
   perfil: () => req('/api/perfil'),
   salvarPerfil: (perfil) => req('/api/perfil', { ...post(perfil), method: 'PUT' }),
   executarPipeline: () => req('/api/pipeline/executar', { method: 'POST' }),
+  statusPipeline: () => req('/api/pipeline/status'),
   reanalisar: (licitacaoId) => req(`/api/licitacoes/${licitacaoId}/reanalisar`, { method: 'POST' }),
   // Documentação (checklist de habilitação + anexos)
   documentos: (licitacaoId) => req(`/api/licitacoes/${licitacaoId}/documentos`),

@@ -9,7 +9,7 @@ from ..analyzer import AnalisadorEdital
 from ..collectors import coletores_ativos
 from ..collectors.pncp import PNCPCollector
 from ..config import settings
-from ..models import PERFIL_PADRAO, Analise, Licitacao, Oportunidade, PerfilEmpresa
+from ..models import PERFIL_PADRAO, Analise, ExecucaoPipeline, Licitacao, Oportunidade, PerfilEmpresa
 
 logger = logging.getLogger(__name__)
 
@@ -169,10 +169,22 @@ def executar_analises(db: Session, limite: int = 10, licitacao_ids: list[int] | 
     return {"analisadas": analisadas, "oportunidades_criadas": oportunidades, "erros": erros}
 
 
-def executar_pipeline(db: Session, dias: int = 3, limite_analises: int = 10) -> dict:
+def executar_pipeline(db: Session, dias: int = 3, limite_analises: int = 10,
+                      gatilho: str = "manual") -> dict:
     coleta = executar_coleta(db, dias=dias)
     analises = executar_analises(db, limite=limite_analises)
-    return {**coleta, **analises}
+    resultado = {**coleta, **analises}
+    # Registra a execução (alimenta o status "última/próxima coleta" do cabeçalho).
+    # `analises` pode vir como {"erro": ...} sem contadores — get() cobre esse caso.
+    db.add(ExecucaoPipeline(
+        gatilho=gatilho,
+        novas_licitacoes=resultado.get("novas_licitacoes", 0),
+        analisadas=resultado.get("analisadas", 0),
+        oportunidades_criadas=resultado.get("oportunidades_criadas", 0),
+        erros=resultado.get("erros", 0),
+    ))
+    db.commit()
+    return resultado
 
 
 def _baixar_pdf_direto(url: str) -> bytes | None:

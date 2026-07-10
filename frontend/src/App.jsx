@@ -15,17 +15,36 @@ const ABAS = [
   { id: 'perfil', rotulo: 'Perfil da Empresa' },
 ]
 
+// "há 2 h" / "em ~40 min" a partir de um ISO UTC vindo do backend
+function tempoRelativo(iso, futuro = false) {
+  const min = Math.round(Math.abs(new Date(iso) - Date.now()) / 60000)
+  if (futuro && new Date(iso) <= Date.now()) return 'a qualquer momento'
+  const texto = min < 60 ? `${Math.max(min, 1)} min` : `${Math.round(min / 60)} h`
+  return futuro ? `em ~${texto}` : `há ${texto}`
+}
+
 export default function App() {
   const [usuario, setUsuario] = useState(undefined) // undefined=verificando | null=deslogado
   const [aba, setAba] = useState('pipeline')
   const [rodando, setRodando] = useState(false)
   const [msg, setMsg] = useState('')
   const [trocandoSenha, setTrocandoSenha] = useState(false)
+  const [coleta, setColeta] = useState(null)
+  const [, setTique] = useState(0) // re-renderiza a cada minuto p/ atualizar o "há X min"
+
+  const carregarColeta = () => api.statusPipeline().then(setColeta).catch(() => {})
 
   useEffect(() => {
     definirAo401(() => setUsuario(null)) // sessão expirou em qualquer chamada -> login
     api.me().then(setUsuario).catch(() => setUsuario(null))
   }, [])
+
+  useEffect(() => {
+    if (!usuario) return
+    carregarColeta()
+    const id = setInterval(() => setTique((t) => t + 1), 60000)
+    return () => clearInterval(id)
+  }, [usuario])
 
   async function sair() {
     try {
@@ -48,6 +67,7 @@ export default function App() {
         `Coleta: ${r.novas_licitacoes} novas • Analisadas: ${r.analisadas} • Oportunidades: ${r.oportunidades_criadas} • Erros: ${r.erros}`
       const avisos = r.avisos?.length ? ` ⚠ ${r.avisos.join(' | ')}` : ''
       setMsg(resumo + avisos)
+      carregarColeta()
     } catch (e) {
       setMsg(`Falha ao executar pipeline: ${e.message}`)
     } finally {
@@ -80,9 +100,21 @@ export default function App() {
             </button>
           ))}
         </nav>
-        <button className="primario" onClick={rodarPipeline} disabled={rodando}>
-          {rodando ? '⏳ Rodando…' : '▶ Buscar e analisar agora'}
-        </button>
+        <div className="acao-pipeline">
+          <button className="primario" onClick={rodarPipeline} disabled={rodando}>
+            {rodando ? '⏳ Rodando…' : '▶ Buscar e analisar agora'}
+          </button>
+          <span className="coleta-status">
+            {coleta?.ultima_execucao ? (
+              <>
+                <span className="led" /> última coleta {tempoRelativo(coleta.ultima_execucao)}
+                {coleta.proxima_estimada && <> · próxima {tempoRelativo(coleta.proxima_estimada, true)}</>}
+              </>
+            ) : coleta ? (
+              <>coleta automática a cada {coleta.intervalo_horas} h</>
+            ) : null}
+          </span>
+        </div>
         <div className="usuario-area">
           <span className="usuario-nome" title={usuario.email}>{usuario.nome || usuario.email}</span>
           <button className="usuario-btn" onClick={() => setTrocandoSenha(true)}>Trocar senha</button>
