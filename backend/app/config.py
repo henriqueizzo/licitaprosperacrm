@@ -6,6 +6,13 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     anthropic_api_key: str = ""
+    # Google Gemini (nível gratuito do AI Studio) — alternativa sem custo para a análise
+    gemini_api_key: str = ""
+    # Alias que acompanha o flash mais recente — evita "model no longer available"
+    # quando o Google aposenta versões antigas para contas novas
+    gemini_model: str = "gemini-flash-latest"
+    # Provedor da análise IA: "gemini" | "anthropic" | "" (auto: gemini se tiver chave, senão claude)
+    ia_provider: str = ""
     conlicitacao_token: str = ""
     database_url: str = "sqlite:///./licitaprospera.db"
 

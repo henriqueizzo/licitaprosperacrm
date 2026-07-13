@@ -5,7 +5,7 @@ import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..analyzer import AnalisadorEdital
+from ..analyzer import ErroCotaIA, criar_analisador, provedor_ativo
 from ..collectors import coletores_ativos
 from ..collectors.pncp import PNCPCollector
 from ..config import settings
@@ -90,12 +90,12 @@ def executar_analises(db: Session, limite: int = 10, licitacao_ids: list[int] | 
 
     Se `licitacao_ids` for passado, reanalisa essas licitações (removendo a análise anterior).
     """
-    if not settings.anthropic_api_key:
-        return {"erro": "ANTHROPIC_API_KEY não configurada no .env — análise IA desativada"}
+    if not provedor_ativo():
+        return {"erro": "Nenhum provedor de IA configurado (GEMINI_API_KEY ou ANTHROPIC_API_KEY) — análise IA desativada"}
 
     perfil = obter_perfil(db)
     perfil_dict = perfil_como_dict(perfil)
-    analisador = AnalisadorEdital()
+    analisador = criar_analisador()
 
     if licitacao_ids:
         pendentes = db.execute(
@@ -111,6 +111,7 @@ def executar_analises(db: Session, limite: int = 10, licitacao_ids: list[int] | 
         ).scalars().all()
 
     analisadas, oportunidades, erros = 0, 0, 0
+    avisos: list[str] = []
     for lic in pendentes:
         pdf = None
         if lic.fonte == "pncp" and lic.edital_url:
@@ -119,6 +120,13 @@ def executar_analises(db: Session, limite: int = 10, licitacao_ids: list[int] | 
             pdf = _baixar_pdf_direto(lic.edital_url)
         try:
             resultado, usage = analisador.analisar(_dados(lic), perfil_dict, pdf)
+        except ErroCotaIA as exc:
+            # Cota/saldo do provedor esgotado: NÃO marca "erro" — a licitação continua
+            # pendente e será analisada no próximo ciclo; interrompe o lote para não
+            # queimar as demais.
+            logger.warning("Análise interrompida por cota de IA: %s", exc)
+            avisos.append(f"Análise IA interrompida: {exc}")
+            break
         except Exception as exc:
             logger.error("Análise da licitação %s falhou: %s", lic.id, exc)
             lic.status_analise = "erro"
@@ -173,17 +181,23 @@ def executar_analises(db: Session, limite: int = 10, licitacao_ids: list[int] | 
                 oportunidades += 1
         db.commit()
 
-    return {"analisadas": analisadas, "oportunidades_criadas": oportunidades, "erros": erros}
+    resultado = {"analisadas": analisadas, "oportunidades_criadas": oportunidades, "erros": erros}
+    if avisos:
+        resultado["avisos"] = avisos
+    return resultado
 
 
 def executar_pipeline(db: Session, dias: int = 3, limite_analises: int = 10,
                       gatilho: str = "manual") -> dict:
     coleta = executar_coleta(db, dias=dias)
     analises = executar_analises(db, limite=limite_analises)
+    # Avisos vêm das duas etapas — junta as listas (o merge de dicts sobrescreveria)
+    avisos = list(coleta.get("avisos") or []) + list(analises.get("avisos") or [])
     resultado = {**coleta, **analises}
+    if avisos:
+        resultado["avisos"] = avisos
     # Registra a execução (alimenta o status "última/próxima coleta" do cabeçalho).
     # `analises` pode vir como {"erro": ...} sem contadores — get() cobre esse caso.
-    avisos = list(resultado.get("avisos") or [])
     if analises.get("erro"):
         avisos.append(f"Análise IA: {analises['erro']}")
     db.add(ExecucaoPipeline(

@@ -38,6 +38,16 @@ async def lifespan(app: FastAPI):
     db = SessionLocal()
     try:
         bootstrap_admin(db)  # cria o admin do .env se não houver nenhum usuário
+        # Reenfileira análises com "erro" (ex.: cota de IA esgotada em versões antigas):
+        # voltam a "pendente" e são analisadas no próximo ciclo. Falhas permanentes
+        # voltam a "erro" na tentativa seguinte — o custo é uma reanálise por deploy.
+        from sqlalchemy import text as sql_text
+        requeue = db.execute(sql_text(
+            "UPDATE licitacoes SET status_analise = 'pendente' WHERE status_analise = 'erro'"
+        ))
+        db.commit()
+        if requeue.rowcount:
+            logger.info("Reenfileiradas %d licitações com análise em 'erro'", requeue.rowcount)
     finally:
         db.close()
     scheduler = None
