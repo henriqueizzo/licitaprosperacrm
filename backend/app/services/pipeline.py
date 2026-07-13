@@ -42,6 +42,13 @@ def executar_coleta(db: Session, dias: int = 3) -> dict:
     palavras = perfil.palavras_chave or []
     novas = 0
     avisos: list[str] = []
+    if not palavras:
+        # Sem palavras-chave o PNCP filtra TUDO (nenhum objeto "bate") e a coleta
+        # zera silenciosamente — melhor avisar do que fingir que não havia nada.
+        avisos.append(
+            "Perfil sem palavras-chave: a coleta do PNCP não retorna nada nesse estado. "
+            "Cadastre as palavras-chave na aba Perfil."
+        )
 
     for coletor in coletores_ativos(settings):
         try:
@@ -176,12 +183,16 @@ def executar_pipeline(db: Session, dias: int = 3, limite_analises: int = 10,
     resultado = {**coleta, **analises}
     # Registra a execução (alimenta o status "última/próxima coleta" do cabeçalho).
     # `analises` pode vir como {"erro": ...} sem contadores — get() cobre esse caso.
+    avisos = list(resultado.get("avisos") or [])
+    if analises.get("erro"):
+        avisos.append(f"Análise IA: {analises['erro']}")
     db.add(ExecucaoPipeline(
         gatilho=gatilho,
         novas_licitacoes=resultado.get("novas_licitacoes", 0),
         analisadas=resultado.get("analisadas", 0),
         oportunidades_criadas=resultado.get("oportunidades_criadas", 0),
         erros=resultado.get("erros", 0),
+        avisos=avisos or None,
     ))
     db.commit()
     return resultado

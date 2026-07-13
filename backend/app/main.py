@@ -34,7 +34,7 @@ async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
     colunas_novas = migrar_esquema()
     if colunas_novas:
-        logger.info("Migração aplicada — colunas adicionadas em `analises`: %s", ", ".join(colunas_novas))
+        logger.info("Migração aplicada — colunas adicionadas: %s", ", ".join(colunas_novas))
     db = SessionLocal()
     try:
         bootstrap_admin(db)  # cria o admin do .env se não houver nenhum usuário

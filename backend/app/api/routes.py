@@ -72,9 +72,21 @@ def status_pipeline(db: Session = Depends(get_db)):
 
     from ..models import ExecucaoPipeline
 
-    ultima = db.execute(
-        select(ExecucaoPipeline).order_by(ExecucaoPipeline.executado_em.desc()).limit(1)
-    ).scalar_one_or_none()
+    execucoes = db.execute(
+        select(ExecucaoPipeline).order_by(ExecucaoPipeline.executado_em.desc()).limit(20)
+    ).scalars().all()
+    ultima = execucoes[0] if execucoes else None
+
+    def _resumo(e):
+        return {
+            "executado_em": e.executado_em.isoformat() + "Z",
+            "gatilho": e.gatilho,
+            "novas_licitacoes": e.novas_licitacoes,
+            "analisadas": e.analisadas,
+            "oportunidades_criadas": e.oportunidades_criadas,
+            "erros": e.erros,
+            "avisos": e.avisos or [],
+        }
 
     intervalo = settings.coleta_intervalo_horas
     proxima = ultima.executado_em + timedelta(hours=intervalo) if (ultima and intervalo > 0) else None
@@ -82,13 +94,8 @@ def status_pipeline(db: Session = Depends(get_db)):
         "intervalo_horas": intervalo,
         "ultima_execucao": ultima.executado_em.isoformat() + "Z" if ultima else None,
         "proxima_estimada": proxima.isoformat() + "Z" if proxima else None,
-        "ultimo_resultado": {
-            "gatilho": ultima.gatilho,
-            "novas_licitacoes": ultima.novas_licitacoes,
-            "analisadas": ultima.analisadas,
-            "oportunidades_criadas": ultima.oportunidades_criadas,
-            "erros": ultima.erros,
-        } if ultima else None,
+        "ultimo_resultado": _resumo(ultima) if ultima else None,
+        "historico": [_resumo(e) for e in execucoes],
     }
 
 

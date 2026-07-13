@@ -109,7 +109,12 @@ export default function App() {
           <span className="coleta-status">
             {coleta?.ultima_execucao ? (
               <>
-                <span className="led" /> última coleta {tempoRelativo(coleta.ultima_execucao)}
+                <span className={coleta.ultimo_resultado?.avisos?.length ? 'led led-alerta' : 'led'} />
+                {' '}última coleta {tempoRelativo(coleta.ultima_execucao)}
+                {coleta.ultimo_resultado && <> · {coleta.ultimo_resultado.novas_licitacoes} novas</>}
+                {coleta.ultimo_resultado?.avisos?.length > 0 && (
+                  <span className="coleta-aviso" title={coleta.ultimo_resultado.avisos.join('\n')}>⚠</span>
+                )}
                 {coleta.proxima_estimada && <> · próxima {tempoRelativo(coleta.proxima_estimada, true)}</>}
               </>
             ) : coleta ? (

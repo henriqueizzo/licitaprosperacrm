@@ -183,6 +183,8 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
   min-height: 0.9em;
 }
 .coleta-status .led { width: 6px; height: 6px; }
+.led-alerta { background: var(--amarelo); box-shadow: 0 0 8px var(--amarelo); }
+.coleta-aviso { color: var(--amarelo); cursor: help; }
 
 /* ---------- Banner de status ---------- */
 .banner {

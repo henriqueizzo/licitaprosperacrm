@@ -151,6 +151,10 @@ class ExecucaoPipeline(Base):
     analisadas: Mapped[int] = mapped_column(Integer, default=0)
     oportunidades_criadas: Mapped[int] = mapped_column(Integer, default=0)
     erros: Mapped[int] = mapped_column(Integer, default=0)
+    # Avisos da execução (coletores que falharam, cobertura incompleta, IA desativada…).
+    # Sem isso, uma coleta que falhou em todas as fontes fica indistinguível de
+    # "não havia nada novo" — foi o que motivou a coluna.
+    avisos: Mapped[list | None] = mapped_column(JSON)
 
 
 class PerfilEmpresa(Base):

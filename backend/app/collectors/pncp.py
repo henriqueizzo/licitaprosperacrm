@@ -26,7 +26,16 @@ PAGINA_PNCP = "https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}"
 # Modalidades relevantes (Lei 14.133): 6=Pregão eletrônico, 8=Dispensa, 4=Concorrência eletrônica
 MODALIDADES = [6, 8, 4]
 
-TIMEOUT = 30
+# /proposta: `dataFinal` é o TETO da data de ENCERRAMENTO das propostas, não "hoje" —
+# com dataFinal=hoje o endpoint devolve apenas o que encerra no próprio dia (uma fatia
+# quase vazia). Usamos hoje+N dias para pegar tudo que ainda está em disputa; o que
+# encerra além do horizonte continua em aberto e entra nas coletas seguintes.
+PROPOSTA_HORIZONTE_DIAS = 45
+
+# 50 é o máximo que a API de consulta aceita (100/500 retornam 400 "Tamanho de página inválido")
+TAMANHO_PAGINA = 50
+
+TIMEOUT = 60  # /proposta chega a passar de 30s para responder
 TENTATIVAS_ESPERA = [3, 10]  # backoff entre tentativas (total: 3 tentativas por página)
 ESPERA_RATE_LIMIT = [15, 30, 60]  # esperas maiores quando o PNCP devolve 429 (rate limit)
 PAUSA_ENTRE_PAGINAS = 0.6  # pausa preventiva entre requisições para não estourar o rate limit
@@ -47,20 +56,21 @@ class PNCPCollector(BaseCollector):
         with httpx.Client(timeout=TIMEOUT) as client:
             for uf in ufs:
                 for modalidade in MODALIDADES:
-                    # 1) Propostas em aberto (principal)
+                    # 1) Propostas em aberto (principal) — encerramento até hoje+horizonte
                     itens = self._paginar(client, PROPOSTA_URL, {
-                        "dataFinal": hoje.strftime("%Y%m%d"),
+                        "dataFinal": (hoje + timedelta(days=PROPOSTA_HORIZONTE_DIAS)).strftime("%Y%m%d"),
                         "codigoModalidadeContratacao": modalidade,
                         "uf": uf,
-                        "tamanhoPagina": 50,
+                        "tamanhoPagina": TAMANHO_PAGINA,
                     })
-                    # 2) Publicadas nos últimos N dias (complemento)
+                    # 2) Publicadas nos últimos N dias (complemento: pega as que ainda
+                    #    não abriram o recebimento de propostas)
                     itens += self._paginar(client, PUBLICACAO_URL, {
                         "dataInicial": (hoje - timedelta(days=dias)).strftime("%Y%m%d"),
                         "dataFinal": hoje.strftime("%Y%m%d"),
                         "codigoModalidadeContratacao": modalidade,
                         "uf": uf,
-                        "tamanhoPagina": 50,
+                        "tamanhoPagina": TAMANHO_PAGINA,
                     })
 
                     for item in itens:
