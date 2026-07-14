@@ -44,6 +44,14 @@ def _migracoes(dialeto: str) -> dict[str, dict[str, str]]:
     }
 
 
+# Colunas que nasceram String(N) mas recebem texto livre: alargar para TEXT.
+# O SQLite não impõe o limite (nada a fazer lá); o Postgres impõe e derrubava
+# o cadastro manual com 500 quando o texto passava do tamanho.
+_ALARGAMENTOS = {
+    ("oportunidades", "responsavel"): "TEXT",
+}
+
+
 def migrar_esquema() -> list[str]:
     """Adiciona colunas novas em bancos já existentes, sem apagar dados.
 
@@ -62,6 +70,14 @@ def migrar_esquema() -> list[str]:
                 if coluna not in existentes:
                     conn.execute(text(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {ddl}"))
                     criadas.append(f"{tabela}.{coluna}")
+        if engine.dialect.name != "sqlite":
+            for (tabela, coluna), tipo in _ALARGAMENTOS.items():
+                if tabela not in tabelas:
+                    continue
+                atual = next((c for c in inspector.get_columns(tabela) if c["name"] == coluna), None)
+                if atual is not None and "VARCHAR" in str(atual["type"]).upper():
+                    conn.execute(text(f"ALTER TABLE {tabela} ALTER COLUMN {coluna} TYPE {tipo}"))
+                    criadas.append(f"{tabela}.{coluna}->{tipo}")
     return criadas
 
 

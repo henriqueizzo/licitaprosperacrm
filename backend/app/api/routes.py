@@ -153,27 +153,27 @@ def criar_licitacao_manual(dados: LicitacaoManualIn, db: Session = Depends(get_d
     if not dados.objeto.strip():
         raise HTTPException(400, "Informe o objeto da licitação")
 
-    id_externo = dados.numero_certame.strip() or f"manual-{uuid4().hex[:12]}"
+    # Truncamentos casados com os limites das colunas (o Postgres impõe; o SQLite não)
+    id_externo = (dados.numero_certame.strip() or f"manual-{uuid4().hex[:12]}")[:120]
     existe = db.execute(
         select(Licitacao).where(Licitacao.fonte == "manual", Licitacao.id_externo == id_externo)
     ).scalar_one_or_none()
-    if existe:
+    if existe and existe.oportunidade:
         raise HTTPException(409, f"Já existe uma licitação manual com o número de certame '{id_externo}'")
 
-    lic = Licitacao(
-        fonte="manual",
-        id_externo=id_externo,
-        orgao=dados.orgao.strip(),
-        municipio=dados.municipio.strip(),
-        uf=dados.uf.strip().upper()[:2],
-        modalidade=dados.modalidade.strip(),
-        objeto=dados.objeto.strip(),
-        valor_estimado=dados.valor_estimado,
-        data_abertura=dados.data_abertura.strip(),
-        data_encerramento=dados.data_encerramento.strip(),
-        link=dados.link.strip(),
-        edital_url=dados.edital_url.strip() or dados.link.strip(),
-    )
+    # Reaproveita cadastro que ficou pela metade (ex.: erro após gravar a licitação):
+    # atualiza os dados e segue para criar a oportunidade/análise.
+    lic = existe or Licitacao(fonte="manual", id_externo=id_externo)
+    lic.orgao = dados.orgao.strip()[:300]
+    lic.municipio = dados.municipio.strip()[:120]
+    lic.uf = dados.uf.strip().upper()[:2]
+    lic.modalidade = dados.modalidade.strip()[:80]
+    lic.objeto = dados.objeto.strip()
+    lic.valor_estimado = dados.valor_estimado
+    lic.data_abertura = dados.data_abertura.strip()[:30]
+    lic.data_encerramento = dados.data_encerramento.strip()[:30]
+    lic.link = dados.link.strip()
+    lic.edital_url = dados.edital_url.strip() or dados.link.strip()
     db.add(lic)
     db.commit()
 

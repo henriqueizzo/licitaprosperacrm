@@ -129,7 +129,9 @@ class Oportunidade(Base):
     licitacao_id: Mapped[int] = mapped_column(ForeignKey("licitacoes.id"))
     estagio: Mapped[str] = mapped_column(String(20), default="identificada")
     notas: Mapped[str] = mapped_column(Text, default="")
-    responsavel: Mapped[str] = mapped_column(String(120), default="")
+    # Text, não String(N): campo de texto livre do usuário — o Postgres impõe o
+    # limite que o SQLite ignora (cadastro manual estourava 500 em produção)
+    responsavel: Mapped[str] = mapped_column(Text, default="")
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     atualizado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
