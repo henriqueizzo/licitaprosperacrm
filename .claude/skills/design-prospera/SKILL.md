@@ -1,42 +1,64 @@
 ---
 name: design-prospera
-description: Design system "Centro de Comando" do LicitaProsperaCRM — usar sempre que criar ou alterar qualquer tela, componente ou estilo do frontend.
+description: Design system do LicitaProsperaCRM (tema claro, identidade do CRM multi-produto) — usar sempre que criar ou alterar qualquer tela, componente ou estilo do frontend.
 ---
 
-# Design system Prospera — "Centro de Comando"
+# Design system Próspera — CRM (tema claro)
 
-Tema escuro azul-profundo aprovado em 2026-07-10. Toda tela nova ou alterada DEVE seguir estas regras. Os tokens vivem em `frontend/src/styles.css` (`:root`) — sempre usar as variáveis CSS, nunca cores hardcoded.
+Identidade adotada em 2026-07-14, alinhada ao CRM multi-produto de referência do
+usuário (`index (1).html` na raiz). Substituiu o tema escuro "Centro de Comando".
+Os tokens vivem em `frontend/src/styles.css` (`:root`) — sempre usar as variáveis
+CSS, nunca cores hardcoded.
 
 ## Conceito
 
-O CRM é uma sala de operações de licitações, não um formulário corporativo. O azul Prospera (#0050E5) é **luz**, não tinta: brilha em botões, abas ativas e scores. Fundos quase-pretos azulados, dados em fonte monoespaçada, rótulos técnicos em caps.
+CRM claro, limpo e "SaaS moderno": fundo branco, cartões brancos de cantos bem
+arredondados com bordas cinza-claras, azul #2563EB como cor de ação, status em
+pílulas pastel com bolinha colorida. Nada de glow, gradientes ou grid de fundo.
 
-## Tokens (já definidos em styles.css)
+## Tokens (styles.css)
 
-- Fundos: `--void` #060A13 (página) · `--panel` #0C1424 (cartões) · `--panel-2` #111C33 (topo de gradientes) · bordas `--linha` #1C2C4D / `--linha-suave` #152341
-- Marca: `--azul` #0050E5 (fills/gradientes) · `--azul-luz` #4D8DFF (texto/bordas em destaque) · `--gelo` #9DC2FF (títulos de seção)
-- Texto: `--texto` #E6EDFB · `--texto-suave` #9DB0D4 · `--texto-mudo` #64769E
-- Status: `--verde` #2BD576 · `--amarelo` #FFB224 · `--vermelho` #FF5D5D, cada um com `-fundo` (12% alpha) e `-borda` (38% alpha)
-- Glow padrão de ação: `--glow-azul`; foco: `--foco`
+- Fundos: `--void` #FFF (página) · `--panel` #FFF (cartões) · `--panel-2` #F8FAFC (seções suaves) · bordas `--linha` #E2E8F0 / `--linha-suave` #F1F5F9
+- Marca: `--azul` #2563EB (ações) · `--azul-suave` #EFF6FF (fundos de destaque) · `--azul-texto` #1D4ED8 (texto sobre pastel)
+- Texto: `--texto` #0F172A · `--texto-suave` #475569 · `--texto-mudo` #94A3B8
+- Status: verde #10B981, âmbar #F59E0B, vermelho #EF4444 — cada um com `-fundo`
+  (pastel: #ECFDF5/#FFFBEB/#FEF2F2), `-borda` (clara) e `-texto` (escuro do matiz:
+  #047857/#B45309/#B91C1C). Em pílula pastel, o texto usa SEMPRE a variante `-texto`,
+  nunca a cor plena.
+- Forma: `--raio` 16px (cartões) · `--raio-sm` 12px (inputs/botões) · pílulas 999px
+- Foco: `--foco` (anel azul-claro #DBEAFE); sombras discretas `--sombra`/`--sombra-md`
 
-## Tipografia (3 papéis, nunca misturar)
+## Tipografia
 
-1. **Display** `var(--display)` = Chakra Petch (self-hosted em `frontend/public/fonts/`, pesos 500/600): títulos, rótulos de abas/colunas, botões primários, nomes de órgão. Rótulos em uppercase levam `letter-spacing` 0.05–0.16em.
-2. **Corpo** `var(--corpo)` = Segoe UI: texto corrido, descrições, inputs.
-3. **Mono** `var(--mono)` = Cascadia Mono/Consolas: TODO valor, data, score, contagem e rótulo técnico (th de tabela, tile-k). Números tabulares (`font-variant-numeric: tabular-nums`) onde alinham em coluna.
+**Inter** para tudo (Google Fonts no `index.html`, pesos 400–800). Papéis por peso,
+não por família: títulos/valores 600–700; rótulos de tabela/seção 600 em 0.68–0.72rem
+uppercase discreto (letter-spacing ≤0.08em); texto corrido 400. Números que alinham
+em coluna: `font-variant-numeric: tabular-nums`.
 
 ## Regras de componente
 
-- **Superfícies**: cartões usam `linear-gradient(180deg, var(--panel-2), var(--panel))` + borda `--linha`; raio 10px (7px em elementos pequenos). Cartões do kanban têm `border-left: 2px solid var(--azul)`.
-- **Ação primária**: gradiente `#1D6BFF → var(--azul)`, borda clara translúcida, `--glow-azul`, texto uppercase em Chakra Petch 600.
-- **Chips de status** (scores, vereditos): fundo 12% alpha + borda 38% alpha + texto na cor plena, fonte mono. Verde ganha glow sutil; âmbar e vermelho não.
-- **Semântica**: verde = aprovado/score alto, âmbar = revisar/moderado, vermelho = reprovado/score baixo. Nunca usar o azul da marca para status.
-- **Grid de fundo**: o body já tem grid blueprint 34px + glow radial no topo — não repetir em containers internos (exceto `.login-fundo`, que tem o próprio).
-- **LED pulsante** (`.led`): indica processo automático ativo; respeita `prefers-reduced-motion`.
-- **Logomarca**: NUNCA alterar, recolorir ou aplicar filtro no `prospera-logo.png`. Sobre fundo escuro, sempre dentro de `.logo-chip` (chip branco arredondado).
-- **Inputs**: fundo `--campo-fundo`, labels em mono uppercase pequeno; foco = borda `--azul-luz` + `--foco`.
-- `color-scheme: dark` está no `:root` — controles nativos (date, checkbox) já rendem escuros.
+- **Cartões**: fundo branco + `border: 1px solid var(--linha)` + raio 16px. Sem gradiente.
+- **Abas (nav)**: controle segmentado — trilho `#F1F5F9` raio 12px com padding 4px;
+  aba ativa = fundo branco + sombra leve + texto escuro; inativa = texto slate-500.
+- **Ação primária**: fundo `--azul` sólido, texto branco 600, raio 12px, hover
+  `brightness(1.1)`. Sem uppercase, sem glow.
+- **Badges/pílulas de status** (scores, vereditos, contadores): raio 999px, fundo
+  pastel + texto `-texto` do matiz; contadores usam `--azul-suave`/`--azul-texto`.
+- **Semântica**: verde = aprovado/alto, âmbar = revisar/moderado, vermelho =
+  reprovado/baixo. Azul é ação/informação, nunca status de aprovação.
+- **Inputs**: fundo branco, borda #CBD5E1, raio 12px; foco = borda azul + `--foco`.
+  Labels em 0.83rem/500 slate-700 (sem uppercase).
+- **Kanban**: colunas `#F8FAFC` raio 16px; cartões brancos raio 12px, hover borda
+  azul-clara + sombra leve. Sem borda de acento à esquerda.
+- **Tabelas**: th com fundo `--panel-2`, texto slate-500 uppercase 0.68rem; linhas
+  divididas por `--linha-suave`; hover `--panel-2`.
+- **Logomarca**: NUNCA alterar/recolorir o `prospera-logo.png`. Sobre fundo claro
+  vai direto (o `.logo-chip` existe mas é transparente).
+- **LED** (`.led`): bolinha verde pulsante = processo automático ativo; âmbar
+  (`.led-alerta`) = há avisos. Sem box-shadow/glow.
 
 ## Ao criar telas novas
 
-Reusar as classes existentes (`.tile`, `.cartao`, `.tabela`, `.veredito`, `.perfil`, `.acoes`) antes de criar novas. Indicadores agregados usam o padrão `.cockpit`/`.tile` (linha luminosa no topo via `::before`). Manter nomes de classe em português, como o restante do projeto.
+Reusar as classes existentes (`.tile`, `.cartao`, `.tabela`, `.veredito`, `.perfil`,
+`.acoes`, `.score`) antes de criar novas. Indicadores agregados usam `.cockpit`/`.tile`.
+Nomes de classe em português, como o restante do projeto.
