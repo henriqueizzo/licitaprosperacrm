@@ -22,6 +22,15 @@ router = APIRouter(prefix="/api")
 cron_router = APIRouter(prefix="/api")
 
 
+@cron_router.get("/saude")
+def saude():
+    """Diagnóstico público mínimo (sem dados sensíveis): o processo está de pé e
+    qual provedor de IA está ativo — permite verificar de fora se as env vars
+    (ex.: GEMINI_API_KEY) chegaram ao processo após um deploy."""
+    from ..analyzer import provedor_ativo
+    return {"ok": True, "ia_provider": provedor_ativo() or "nenhum"}
+
+
 def _pipeline_em_background(dias: int, limite_analises: int) -> None:
     """Roda o pipeline com sessão própria (a da requisição já terá sido fechada)."""
     from ..database import SessionLocal
