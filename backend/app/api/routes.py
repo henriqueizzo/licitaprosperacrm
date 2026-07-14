@@ -156,8 +156,10 @@ class LicitacaoManualIn(BaseModel):
 def criar_licitacao_manual(dados: LicitacaoManualIn, db: Session = Depends(get_db)):
     """Cadastra uma licitação manualmente (fonte 'manual').
 
-    Por padrão também cria a oportunidade correspondente no pipeline; se `analisar`
-    for True, dispara a análise IA em seguida (falha na análise não bloqueia o cadastro).
+    Regra de negócio: registro manual SEMPRE vira oportunidade no pipeline e NÃO
+    passa pela análise IA automática (status 'manual'). A reanálise sob demanda
+    (botão "reanalisar") continua disponível. Os campos `criar_oportunidade` e
+    `analisar` do payload são ignorados (compatibilidade com clientes antigos).
     """
     if not dados.objeto.strip():
         raise HTTPException(400, "Informe o objeto da licitação")
@@ -183,30 +185,101 @@ def criar_licitacao_manual(dados: LicitacaoManualIn, db: Session = Depends(get_d
     lic.data_encerramento = dados.data_encerramento.strip()[:30]
     lic.link = dados.link.strip()
     lic.edital_url = dados.edital_url.strip() or dados.link.strip()
+    if lic.status_analise != "analisada":
+        # 'manual' fica fora do lote automático de análise IA (regra de negócio)
+        lic.status_analise = "manual"
     db.add(lic)
     db.commit()
 
-    oportunidade = None
-    if dados.criar_oportunidade:
-        oportunidade = Oportunidade(
-            licitacao_id=lic.id, estagio="identificada",
-            notas=dados.observacoes.strip(), responsavel=dados.responsavel.strip(),
-        )
-        db.add(oportunidade)
-        db.commit()
-
-    resultado_analise = None
-    if dados.analisar:
-        try:
-            resultado_analise = pipeline.executar_analises(db, licitacao_ids=[lic.id])
-        except Exception as exc:  # análise nunca bloqueia o cadastro
-            resultado_analise = {"erro": f"Análise IA falhou: {exc}"}
+    oportunidade = Oportunidade(
+        licitacao_id=lic.id, estagio="identificada",
+        notas=dados.observacoes.strip(), responsavel=dados.responsavel.strip(),
+    )
+    db.add(oportunidade)
+    db.commit()
 
     out = _licitacao_out(lic, db)
-    out["oportunidade_id"] = oportunidade.id if oportunidade else None
-    if resultado_analise is not None:
-        out["analise_pipeline"] = resultado_analise
+    out["oportunidade_id"] = oportunidade.id
     return out
+
+
+# ---------- Preenchimento automático do Cadastro Manual ----------
+
+class ExtrairIn(BaseModel):
+    texto: str = ""   # resumo/texto colado pelo usuário
+    url: str = ""     # ou link da licitação (página do portal ou PDF do edital)
+
+
+@router.post("/licitacoes/extrair")
+def extrair_campos_licitacao(dados: ExtrairIn):
+    """Extrai os campos do formulário de cadastro a partir de um resumo ou link.
+
+    Baixa o conteúdo do link (HTML vira texto; PDF vai direto para a IA) e usa o
+    provedor de IA ativo para devolver os campos estruturados — o usuário revisa
+    antes de cadastrar.
+    """
+    from ..analyzer import ErroCotaIA, criar_analisador
+
+    texto = dados.texto.strip()
+    url = dados.url.strip()
+    if not texto and not url:
+        raise HTTPException(400, "Cole o resumo da licitação ou informe o link")
+
+    pdf = None
+    if url:
+        conteudo_html, pdf = _baixar_conteudo(url)
+        if conteudo_html:
+            texto = (texto + "\n\n" + conteudo_html).strip()
+        if not conteudo_html and not pdf:
+            if not texto:
+                raise HTTPException(
+                    422,
+                    "Não consegui ler o conteúdo desse link (página protegida ou dinâmica). "
+                    "Cole o resumo/texto da licitação e tente de novo.",
+                )
+
+    try:
+        campos = criar_analisador().extrair(texto=texto or None, pdf_bytes=pdf)
+    except ErroCotaIA as exc:
+        raise HTTPException(503, f"IA indisponível no momento: {exc}")
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+
+    out = campos.model_dump()
+    out["link"] = url
+    return out
+
+
+def _baixar_conteudo(url: str) -> tuple[str | None, bytes | None]:
+    """Baixa o link do usuário. Retorna (texto_da_pagina, pdf_bytes) — um dos dois."""
+    import httpx
+
+    try:
+        with httpx.Client(timeout=45, follow_redirects=True, headers={
+            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                           "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"),
+        }) as client:
+            resp = client.get(url)
+            resp.raise_for_status()
+    except Exception as exc:
+        logger.warning("Falha ao baixar link para extração %s: %s", url, exc)
+        return None, None
+
+    if resp.content[:5].startswith(b"%PDF"):
+        return None, resp.content if len(resp.content) <= 19 * 1024 * 1024 else None
+    return _html_para_texto(resp.text), None
+
+
+def _html_para_texto(html: str) -> str | None:
+    """Reduz HTML a texto puro (sem scripts/estilos) para a extração por IA."""
+    import html as html_lib
+    import re as re_lib
+
+    sem_blocos = re_lib.sub(r"(?is)<(script|style|noscript|svg)[^>]*>.*?</\1>", " ", html)
+    texto = re_lib.sub(r"(?s)<[^>]+>", " ", sem_blocos)
+    texto = html_lib.unescape(texto)
+    texto = re_lib.sub(r"\s+", " ", texto).strip()
+    return texto[:80000] or None
 
 
 @router.get("/licitacoes")

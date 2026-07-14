@@ -444,6 +444,20 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
   padding: 8px 12px;
 }
 
+/* Preenchimento automático (Cadastro Manual) */
+.auto-preencher {
+  background: var(--panel-2);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-sm);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.auto-preencher h3 { font-size: 0.95rem; font-weight: 600; color: var(--texto); }
+.auto-preencher button.primario { align-self: flex-start; }
+.auto-dica { font-size: 0.82rem; color: var(--texto-mudo); }
+
 /* ---------- Documentação (checklist + anexos) ---------- */
 .btn-docs {
   font-family: var(--corpo);

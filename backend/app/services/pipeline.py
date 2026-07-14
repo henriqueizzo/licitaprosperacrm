@@ -106,8 +106,12 @@ def executar_analises(db: Session, limite: int = 10, licitacao_ids: list[int] | 
                 db.delete(antiga)
         db.commit()
     else:
+        # Registros manuais ficam fora do lote automático (regra de negócio:
+        # cadastro manual vai direto ao pipeline, sem análise IA)
         pendentes = db.execute(
-            select(Licitacao).where(Licitacao.status_analise == "pendente").limit(limite)
+            select(Licitacao)
+            .where(Licitacao.status_analise == "pendente", Licitacao.fonte != "manual")
+            .limit(limite)
         ).scalars().all()
 
     analisadas, oportunidades, erros = 0, 0, 0

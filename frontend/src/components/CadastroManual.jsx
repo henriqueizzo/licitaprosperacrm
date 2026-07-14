@@ -14,8 +14,6 @@ const FORM_VAZIO = {
   link: '',
   observacoes: '',
   responsavel: '',
-  criar_oportunidade: true,
-  analisar: false,
 }
 
 const MODALIDADES = [
@@ -25,11 +23,45 @@ const MODALIDADES = [
 
 export default function CadastroManual() {
   const [form, setForm] = useState(FORM_VAZIO)
+  const [resumo, setResumo] = useState('')
+  const [linkAuto, setLinkAuto] = useState('')
+  const [extraindo, setExtraindo] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [msg, setMsg] = useState('')
 
   const set = (campo) => (e) => setForm({ ...form, [campo]: e.target.value })
-  const setCheck = (campo) => (e) => setForm({ ...form, [campo]: e.target.checked })
+
+  async function preencherAutomatico() {
+    if (!resumo.trim() && !linkAuto.trim()) {
+      setMsg('⚠ Cole o resumo da licitação ou informe o link para preencher automaticamente.')
+      return
+    }
+    setExtraindo(true)
+    setMsg('🔎 Lendo o conteúdo e preenchendo os campos… isso leva alguns segundos.')
+    try {
+      const c = await api.extrairLicitacao(resumo, linkAuto)
+      setForm((f) => ({
+        ...f,
+        objeto: c.objeto || f.objeto,
+        orgao: c.orgao || f.orgao,
+        municipio: c.municipio || f.municipio,
+        uf: c.uf || f.uf,
+        modalidade: c.modalidade || f.modalidade,
+        numero_certame: c.numero_certame || f.numero_certame,
+        valor_estimado: c.valor_estimado ?? f.valor_estimado,
+        data_abertura: c.data_abertura || f.data_abertura,
+        data_encerramento: c.data_encerramento || f.data_encerramento,
+        link: c.link || f.link,
+        responsavel: c.responsavel || f.responsavel,
+        observacoes: c.observacoes || f.observacoes,
+      }))
+      setMsg('✅ Campos preenchidos — revise abaixo e clique em "Cadastrar licitação".')
+    } catch (e) {
+      setMsg(`⚠ Não consegui preencher automaticamente: ${e.message}`)
+    } finally {
+      setExtraindo(false)
+    }
+  }
 
   async function salvar() {
     if (!form.objeto.trim()) {
@@ -37,7 +69,7 @@ export default function CadastroManual() {
       return
     }
     setSalvando(true)
-    setMsg(form.analisar ? 'Cadastrando e analisando com IA… isso pode levar um minuto.' : 'Cadastrando…')
+    setMsg('Cadastrando…')
     try {
       const r = await api.criarLicitacao({
         ...form,
@@ -45,16 +77,14 @@ export default function CadastroManual() {
         valor_estimado: form.valor_estimado === '' ? null : Number(form.valor_estimado),
         edital_url: form.link,
       })
-      let texto = `✅ Licitação cadastrada (nº ${r.id_externo})`
-      texto += r.oportunidade_id ? ' e oportunidade criada no Pipeline.' : '.'
-      if (r.analise_pipeline?.erro) texto += ` ⚠ ${r.analise_pipeline.erro}`
-      else if (r.analise_pipeline) texto += ` Análise IA concluída: ${r.analise_pipeline.analisadas} analisada(s).`
-      setMsg(texto)
+      setMsg(`✅ Licitação cadastrada (nº ${r.id_externo}) e adicionada ao Pipeline.`)
       setForm(FORM_VAZIO)
+      setResumo('')
+      setLinkAuto('')
     } catch (e) {
       setMsg(
         e.message.includes('409')
-          ? '⚠ Já existe uma licitação manual com esse número de certame.'
+          ? '⚠ Essa licitação já está no pipeline (mesmo número de certame).'
           : `Erro ao cadastrar: ${e.message}`
       )
     } finally {
@@ -64,6 +94,27 @@ export default function CadastroManual() {
 
   return (
     <div className="perfil">
+      <div className="auto-preencher">
+        <h3>Preenchimento automático</h3>
+        <p className="auto-dica">
+          Cole o resumo/aviso da licitação ou o link do portal — a IA preenche o formulário
+          para você revisar.
+        </p>
+        <label>
+          Resumo / texto da licitação
+          <textarea rows={4} value={resumo} onChange={(e) => setResumo(e.target.value)}
+            placeholder="Cole aqui o aviso, o resumo do edital ou qualquer texto com os dados da licitação…" />
+        </label>
+        <label>
+          Ou o link da licitação (página do portal ou PDF do edital)
+          <input type="url" value={linkAuto} onChange={(e) => setLinkAuto(e.target.value)}
+            placeholder="https://…" />
+        </label>
+        <button className="primario" onClick={preencherAutomatico} disabled={extraindo || salvando}>
+          {extraindo ? '⏳ Preenchendo…' : '✨ Preencher automaticamente'}
+        </button>
+      </div>
+
       <div className="grade">
         <label>
           Objeto / título da licitação *
@@ -119,17 +170,10 @@ export default function CadastroManual() {
             placeholder="Notas internas — vão para o cartão da oportunidade no Pipeline" />
         </label>
       </div>
-      <label className="check">
-        <input type="checkbox"
-          checked={form.criar_oportunidade} onChange={setCheck('criar_oportunidade')} />
-        Criar oportunidade no Pipeline
-      </label>
-      <label className="check">
-        <input type="checkbox"
-          checked={form.analisar} onChange={setCheck('analisar')} />
-        Analisar com IA após cadastrar (usa o link do edital, se houver)
-      </label>
-      <button className="primario" onClick={salvar} disabled={salvando}>
+      <p className="auto-dica">
+        O registro manual entra direto como oportunidade no Pipeline, sem passar pela análise IA.
+      </p>
+      <button className="primario" onClick={salvar} disabled={salvando || extraindo}>
         {salvando ? '⏳ Cadastrando…' : 'Cadastrar licitação'}
       </button>
       {msg && <p className="form-msg">{msg}</p>}

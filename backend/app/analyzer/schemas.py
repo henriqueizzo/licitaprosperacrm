@@ -32,6 +32,22 @@ class UsoIA:
     output_tokens: int
 
 
+class CamposLicitacao(BaseModel):
+    """Campos cadastrais extraídos de um resumo/link para o Cadastro Manual."""
+
+    objeto: str = Field(default="", description="Objeto/título da licitação")
+    orgao: str = Field(default="", description="Órgão/entidade licitante")
+    municipio: str = Field(default="", description="Município do órgão")
+    uf: str = Field(default="", description="Sigla da UF com 2 letras maiúsculas")
+    modalidade: str = Field(default="", description="Modalidade (ex.: Pregão Eletrônico)")
+    numero_certame: str = Field(default="", description="Número/identificação do certame")
+    valor_estimado: float | None = Field(default=None, description="Valor estimado em reais")
+    data_abertura: str = Field(default="", description="Abertura das propostas, YYYY-MM-DD ou vazio")
+    data_encerramento: str = Field(default="", description="Encerramento/limite, YYYY-MM-DD ou vazio")
+    responsavel: str = Field(default="", description="Agente de contratação/pregoeiro/contato")
+    observacoes: str = Field(default="", description="Outras informações úteis, 1-3 frases")
+
+
 class Prazo(BaseModel):
     descricao: str = Field(description="Ex.: Abertura das propostas, Prazo de impugnação")
     data_ou_prazo: str = Field(description="Data (ISO) ou prazo em dias, como consta no edital")

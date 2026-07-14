@@ -12,8 +12,13 @@ import logging
 import anthropic
 
 from ..config import settings
-from .prompts import SYSTEM_ANALISTA, prompt_analise
-from .schemas import CLASSIFICACOES, ErroCotaIA, ResultadoAnalise  # noqa: F401 (reexport legado)
+from .prompts import SYSTEM_ANALISTA, SYSTEM_EXTRACAO, prompt_analise, prompt_extracao
+from .schemas import (  # noqa: F401 (reexport legado)
+    CLASSIFICACOES,
+    CamposLicitacao,
+    ErroCotaIA,
+    ResultadoAnalise,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +70,37 @@ class AnalisadorEdital:
 
         resultado: ResultadoAnalise = response.parsed_output
         return resultado.normalizar(), response.usage
+
+    def extrair(self, texto: str | None = None, pdf_bytes: bytes | None = None) -> CamposLicitacao:
+        """Extrai campos cadastrais de um resumo/texto ou PDF (preenchimento automático)."""
+        if pdf_bytes and len(pdf_bytes) > MAX_PDF_BYTES:
+            pdf_bytes = None
+        content: list[dict] = []
+        if pdf_bytes:
+            content.append({
+                "type": "document",
+                "source": {
+                    "type": "base64",
+                    "media_type": "application/pdf",
+                    "data": base64.standard_b64encode(pdf_bytes).decode(),
+                },
+            })
+        content.append({"type": "text", "text": prompt_extracao(texto, tem_pdf=pdf_bytes is not None)})
+        try:
+            response = self.client.messages.parse(
+                model=settings.claude_model,
+                max_tokens=4000,
+                system=SYSTEM_EXTRACAO,
+                messages=[{"role": "user", "content": content}],
+                output_format=CamposLicitacao,
+            )
+        except anthropic.BadRequestError as exc:
+            if "credit balance" in str(exc.message).lower():
+                raise ErroCotaIA("Créditos da API Anthropic esgotados.") from exc
+            raise
+        except anthropic.RateLimitError as exc:
+            raise ErroCotaIA("Rate limit da API Anthropic persistente.") from exc
+        return response.parsed_output
 
     def _chamar(self, content: list[dict]):
         return self.client.messages.parse(

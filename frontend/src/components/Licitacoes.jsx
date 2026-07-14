@@ -11,6 +11,12 @@ const CORES_VEREDITO = {
   revisar_manual: 'amarelo',
 }
 
+const ROTULO_STATUS = {
+  pendente: 'aguardando análise',
+  manual: 'cadastro manual',
+  erro: 'erro na análise',
+}
+
 const CORES_CLASSIFICACAO = {
   'EXCELENTE OPORTUNIDADE': 'verde',
   'BOA OPORTUNIDADE': 'verde',
@@ -60,7 +66,7 @@ export default function Licitacoes() {
                     </span>
                   )
                 ) : (
-                  <span className="pendente">{l.status_analise}</span>
+                  <span className="pendente">{ROTULO_STATUS[l.status_analise] || l.status_analise}</span>
                 )}
               </td>
               <td>

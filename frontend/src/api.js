@@ -32,6 +32,7 @@ const post = (body) => ({
 export const api = {
   licitacoes: (params = '') => req(`/api/licitacoes${params}`),
   criarLicitacao: (dados) => req('/api/licitacoes', post(dados)),
+  extrairLicitacao: (texto, url) => req('/api/licitacoes/extrair', post({ texto, url })),
   oportunidades: () => req('/api/oportunidades'),
   criarOportunidade: (licitacaoId) =>
     req('/api/oportunidades', post({ licitacao_id: licitacaoId })),

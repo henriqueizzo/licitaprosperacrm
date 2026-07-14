@@ -280,6 +280,40 @@ Baseie-se somente no conteúdo fornecido; não invente cláusulas.
 
 SYSTEM_ANALISTA = PROMPT_OFICIAL + INSTRUCOES_SAIDA_ESTRUTURADA
 
+# ---------------------------------------------------------------------------
+# Extração de campos cadastrais (preenchimento automático do Cadastro Manual)
+# ---------------------------------------------------------------------------
+
+SYSTEM_EXTRACAO = """\
+Você extrai dados cadastrais de licitações públicas brasileiras a partir de um texto
+(resumo, aviso, página de portal) ou de um edital em PDF.
+
+Regras:
+- Preencha somente o que estiver explícito no conteúdo; NÃO invente nada.
+- Campos ausentes ficam vazios ("" ou null).
+- objeto: o objeto/título da licitação, completo mas sem repetições.
+- uf: sigla de 2 letras maiúsculas (ex.: SC).
+- datas em formato ISO (YYYY-MM-DD). data_abertura = abertura/início das propostas;
+  data_encerramento = encerramento/limite das propostas ou do credenciamento.
+- valor_estimado: número em reais, sem pontos de milhar (ex.: 940000.00). Se o texto
+  trouxer formato brasileiro ("R$ 940.000,00"), converta corretamente.
+- modalidade: ex.: Pregão Eletrônico, Concorrência, Dispensa de Licitação,
+  Credenciamento, Inexigibilidade.
+- numero_certame: número/identificação do certame (ex.: "PE 45/2026", "06.2025").
+- responsavel: nome(s) do agente de contratação/pregoeiro/contato, com cargo se houver.
+- observacoes: informações úteis que não couberam nos demais campos (portal de envio,
+  e-mail de contato, exigências marcantes), em 1-3 frases.
+"""
+
+
+def prompt_extracao(texto: str | None, tem_pdf: bool) -> str:
+    partes = ["Extraia os campos cadastrais da licitação a partir do conteúdo abaixo."]
+    if tem_pdf:
+        partes.append("O edital/documento está anexado como PDF — use-o como fonte principal.")
+    if texto:
+        partes.append("\n--- CONTEÚDO ---\n" + texto)
+    return "\n".join(partes)
+
 
 def prompt_analise(perfil: dict, dados_licitacao: dict, tem_pdf: bool) -> str:
     """Monta o prompt do usuário com os dados da licitação (conteúdo volátil fica aqui,

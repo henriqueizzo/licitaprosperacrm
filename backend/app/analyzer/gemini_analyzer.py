@@ -16,8 +16,8 @@ from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 
 from ..config import settings
-from .prompts import SYSTEM_ANALISTA, prompt_analise
-from .schemas import ErroCotaIA, ResultadoAnalise, UsoIA
+from .prompts import SYSTEM_ANALISTA, SYSTEM_EXTRACAO, prompt_analise, prompt_extracao
+from .schemas import CamposLicitacao, ErroCotaIA, ResultadoAnalise, UsoIA
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +65,24 @@ class AnalisadorEditalGemini:
         saida = ((uso.candidates_token_count or 0) + (uso.thoughts_token_count or 0)) if uso else 0
         return resultado.normalizar(), UsoIA(input_tokens=entrada, output_tokens=saida)
 
-    def _gerar_com_retry(self, contents: list):
+    def extrair(self, texto: str | None = None, pdf_bytes: bytes | None = None) -> CamposLicitacao:
+        """Extrai campos cadastrais de um resumo/texto ou PDF (preenchimento automático)."""
+        if pdf_bytes and len(pdf_bytes) > MAX_PDF_BYTES:
+            pdf_bytes = None
+        contents: list = []
+        if pdf_bytes:
+            contents.append(genai_types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"))
+        contents.append(prompt_extracao(texto, tem_pdf=pdf_bytes is not None))
+        response = self._gerar_com_retry(
+            contents, system=SYSTEM_EXTRACAO, schema=CamposLicitacao, max_tokens=4000
+        )
+        campos = response.parsed
+        if campos is None:
+            campos = CamposLicitacao.model_validate_json(response.text)
+        return campos
+
+    def _gerar_com_retry(self, contents: list, system: str = SYSTEM_ANALISTA,
+                         schema=ResultadoAnalise, max_tokens: int = 16000):
         modelos = [settings.gemini_model] + [m for m in MODELOS_FALLBACK if m != settings.gemini_model]
         ultima_5xx: Exception | None = None
         for modelo in modelos:
@@ -73,7 +90,7 @@ class AnalisadorEditalGemini:
             tentativas_5xx = 0
             while True:
                 try:
-                    return self._gerar(modelo, contents)
+                    return self._gerar(modelo, contents, system, schema, max_tokens)
                 except genai_errors.APIError as exc:
                     if exc.code == 429:
                         if rate_limits < len(ESPERAS_RATE_LIMIT):
@@ -102,14 +119,14 @@ class AnalisadorEditalGemini:
                     raise
         raise ultima_5xx  # todos os modelos indisponíveis (transitório — próximo ciclo resolve)
 
-    def _gerar(self, modelo: str, contents: list):
+    def _gerar(self, modelo: str, contents: list, system: str, schema, max_tokens: int):
         return self.client.models.generate_content(
             model=modelo,
             contents=contents,
             config=genai_types.GenerateContentConfig(
-                system_instruction=SYSTEM_ANALISTA,
+                system_instruction=system,
                 response_mime_type="application/json",
-                response_schema=ResultadoAnalise,
-                max_output_tokens=16000,
+                response_schema=schema,
+                max_output_tokens=max_tokens,
             ),
         )

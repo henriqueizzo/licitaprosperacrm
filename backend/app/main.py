@@ -43,11 +43,20 @@ async def lifespan(app: FastAPI):
         # voltam a "erro" na tentativa seguinte — o custo é uma reanálise por deploy.
         from sqlalchemy import text as sql_text
         requeue = db.execute(sql_text(
-            "UPDATE licitacoes SET status_analise = 'pendente' WHERE status_analise = 'erro'"
+            "UPDATE licitacoes SET status_analise = 'pendente' "
+            "WHERE status_analise = 'erro' AND fonte != 'manual'"
+        ))
+        # Registros manuais não passam pela análise automática (regra de negócio):
+        # normaliza os antigos que ficaram 'pendente'/'erro' para 'manual'.
+        manuais = db.execute(sql_text(
+            "UPDATE licitacoes SET status_analise = 'manual' "
+            "WHERE fonte = 'manual' AND status_analise IN ('pendente', 'erro')"
         ))
         db.commit()
         if requeue.rowcount:
             logger.info("Reenfileiradas %d licitações com análise em 'erro'", requeue.rowcount)
+        if manuais.rowcount:
+            logger.info("Normalizadas %d licitações manuais para status 'manual'", manuais.rowcount)
     finally:
         db.close()
     scheduler = None
