@@ -113,7 +113,11 @@ export default function App() {
                 {' '}última coleta {tempoRelativo(coleta.ultima_execucao)}
                 {coleta.ultimo_resultado && <> · {coleta.ultimo_resultado.novas_licitacoes} novas</>}
                 {coleta.ultimo_resultado?.avisos?.length > 0 && (
-                  <span className="coleta-aviso" title={coleta.ultimo_resultado.avisos.join('\n')}>⚠</span>
+                  <button
+                    className="coleta-aviso"
+                    title="Ver avisos da última coleta"
+                    onClick={() => setMsg(`⚠ Avisos da última coleta: ${coleta.ultimo_resultado.avisos.join(' • ')}`)}
+                  >⚠</button>
                 )}
                 {coleta.proxima_estimada && <> · próxima {tempoRelativo(coleta.proxima_estimada, true)}</>}
               </>
