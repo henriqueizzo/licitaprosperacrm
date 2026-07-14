@@ -116,24 +116,29 @@ header {
 nav {
   display: flex;
   gap: 4px;
-  flex: 1;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;              /* abas sempre numa única linha horizontal */
   background: #f1f5f9;
   border-radius: var(--raio-sm);
   padding: 4px;
   width: fit-content;
-  flex-grow: 0;
+  max-width: 100%;
+  overflow-x: auto;               /* se faltar espaço, desliza — não quebra linha */
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
 }
+nav::-webkit-scrollbar { display: none; }
 nav button {
   font-family: var(--display);
   font-weight: 500;
-  font-size: 0.85rem;
+  font-size: 0.83rem;
   border: none;
   background: transparent;
-  padding: 8px 14px;
+  padding: 8px 12px;
   border-radius: 9px;
   cursor: pointer;
   color: #64748b;
+  white-space: nowrap;
+  flex: none;
   transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
 }
 nav button:hover { color: var(--texto); }
@@ -754,6 +759,12 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 .modal-estreito { max-width: 420px; }
 
 /* ---------- Responsivo ---------- */
+@media (max-width: 1240px) {
+  /* Libera espaço para as 6 abas continuarem numa linha só */
+  .marca-sub { display: none; }
+  header { gap: 12px; }
+}
+
 @media (max-width: 900px) {
   .cockpit { grid-template-columns: repeat(2, 1fr); }
 }
