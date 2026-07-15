@@ -78,6 +78,21 @@ def migrar_esquema() -> list[str]:
                 if atual is not None and "VARCHAR" in str(atual["type"]).upper():
                     conn.execute(text(f"ALTER TABLE {tabela} ALTER COLUMN {coluna} TYPE {tipo}"))
                     criadas.append(f"{tabela}.{coluna}->{tipo}")
+
+            # Segurança (alerta rls_disabled_in_public do Supabase): o Supabase expõe
+            # as tabelas do schema public numa API REST pública; sem RLS, quem tiver a
+            # chave do projeto lê/edita tudo. O CRM não usa essa API — acessa o banco
+            # por conexão direta como DONO das tabelas, e dono não é afetado por RLS.
+            # Ligar RLS (sem policies) fecha a API pública sem mudar nada no app, e
+            # roda a cada startup para cobrir tabelas criadas no futuro.
+            sem_rls = conn.execute(text(
+                "SELECT c.relname FROM pg_class c "
+                "JOIN pg_namespace n ON n.oid = c.relnamespace "
+                "WHERE n.nspname = 'public' AND c.relkind = 'r' AND NOT c.relrowsecurity"
+            )).scalars().all()
+            for tabela in sem_rls:
+                conn.execute(text(f'ALTER TABLE public."{tabela}" ENABLE ROW LEVEL SECURITY'))
+                criadas.append(f"RLS:{tabela}")
     return criadas
 
 
