@@ -1,9 +1,17 @@
 import { Fragment, useEffect, useState } from 'react'
 import { api } from '../api.js'
 import Documentacao from './Documentacao.jsx'
+import CampoBusca, { normalizar, contemTermo } from './CampoBusca.jsx'
 
 const brl = (v) =>
   v == null ? '—' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+// ISO (YYYY-MM-DD ou datetime) → DD/MM/AAAA
+const dataBr = (iso) => {
+  if (!iso) return '—'
+  const [a, m, d] = String(iso).slice(0, 10).split('-')
+  return a && m && d ? `${d}/${m}/${a}` : '—'
+}
 
 const CORES_VEREDITO = {
   participar: 'verde',
@@ -30,30 +38,78 @@ export default function Licitacoes() {
   const [aberta, setAberta] = useState(null)
   const [docsAberta, setDocsAberta] = useState(null)
   const [erro, setErro] = useState('')
+  const [msg, setMsg] = useState('')
+  const [reanalisando, setReanalisando] = useState(null) // id da licitação em reanálise
+  const [busca, setBusca] = useState('')
 
-  useEffect(() => {
-    api.licitacoes().then(setItens).catch((e) => setErro(e.message))
-  }, [])
+  const carregar = () => api.licitacoes().then(setItens).catch((e) => setErro(e.message))
+  useEffect(() => { carregar() }, [])
+
+  async function reanalisar(l) {
+    setReanalisando(l.id)
+    setMsg('Reanalisando com IA… isso pode levar um minuto.')
+    try {
+      const r = await api.reanalisar(l.id)
+      setMsg(r.erro ? `⚠ ${r.erro}` : '✅ Reanálise concluída.')
+      await carregar()
+    } catch (e) {
+      setMsg(`Erro na reanálise: ${e.message}`)
+    } finally {
+      setReanalisando(null)
+    }
+  }
+
+  // Busca client-side, sem acento — mesmos campos do kanban
+  const termo = normalizar(busca.trim())
+  const visiveis = !termo
+    ? itens
+    : itens.filter((l) =>
+        contemTermo(termo, [
+          l.objeto,
+          l.analise?.objeto_resumido,
+          l.orgao,
+          l.municipio,
+          l.uf,
+          l.id_externo,
+        ])
+      )
 
   if (erro) return <p className="erro">Backend indisponível: {erro}</p>
   if (!itens.length) return <p>Nenhuma licitação coletada ainda. Clique em “Buscar e analisar agora”.</p>
 
   return (
+    <>
+    {msg && <div className="banner">{msg}</div>}
+    <div className="barra-busca">
+      <CampoBusca
+        valor={busca}
+        aoMudar={setBusca}
+        placeholder="Buscar por órgão, objeto, município, UF ou pregão…"
+      />
+      {termo && (
+        <span className="busca-contagem">
+          {visiveis.length} de {itens.length} licitações
+        </span>
+      )}
+    </div>
+    {!visiveis.length && <p>Nenhuma licitação corresponde à busca.</p>}
+    {visiveis.length > 0 && (
     <table className="tabela">
       <thead>
         <tr>
-          <th>Órgão</th><th>Objeto</th><th>UF</th><th>Valor</th><th>Encerramento</th><th>Análise IA</th><th>Docs</th>
+          <th>Órgão</th><th>Objeto</th><th>UF</th><th>Valor</th><th>Identificada em</th><th>Vence em</th><th>Análise IA</th><th>Ações</th>
         </tr>
       </thead>
       <tbody>
-        {itens.map((l) => (
+        {visiveis.map((l) => (
           <Fragment key={l.id}>
             <tr onClick={() => setAberta(aberta === l.id ? null : l.id)} className="linha">
               <td>{l.orgao}</td>
               <td className="objeto">{l.objeto}</td>
               <td>{l.uf}</td>
               <td>{brl(l.valor_estimado)}</td>
-              <td>{l.data_encerramento?.slice(0, 10) || '—'}</td>
+              <td>{dataBr(l.criado_em)}</td>
+              <td>{dataBr(l.data_encerramento)}</td>
               <td>
                 {l.analise ? (
                   l.analise.classificacao_final ? (
@@ -70,28 +126,36 @@ export default function Licitacoes() {
                 )}
               </td>
               <td>
-                <button
-                  type="button"
-                  className={`btn-docs${docsAberta === l.id ? ' ativo' : ''}`}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setDocsAberta(docsAberta === l.id ? null : l.id)
-                  }}
-                >
-                  Documentação
-                </button>
+                <span className="acoes-linha" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className={`btn-docs${docsAberta === l.id ? ' ativo' : ''}`}
+                    onClick={() => setDocsAberta(docsAberta === l.id ? null : l.id)}
+                  >
+                    Documentação
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-docs"
+                    disabled={reanalisando === l.id}
+                    onClick={() => reanalisar(l)}
+                    title="Refazer a análise IA desta licitação"
+                  >
+                    {reanalisando === l.id ? 'reanalisando…' : 'reanalisar'}
+                  </button>
+                </span>
               </td>
             </tr>
             {docsAberta === l.id && (
               <tr className="detalhe">
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <Documentacao licitacao={l} aoFechar={() => setDocsAberta(null)} />
                 </td>
               </tr>
             )}
             {aberta === l.id && l.analise && (
               <tr className="detalhe">
-                <td colSpan={7}>
+                <td colSpan={8}>
                   <p><strong>Resumo:</strong> {l.analise.objeto_resumido}</p>
                   {l.analise.classificacao_final && (
                     <p>
@@ -133,5 +197,7 @@ export default function Licitacoes() {
         ))}
       </tbody>
     </table>
+    )}
+    </>
   )
 }

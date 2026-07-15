@@ -10,8 +10,11 @@ from sqlalchemy.orm import Session
 
 from ..config import settings
 from ..database import get_db
-from ..models import Analise, DocumentoAnexo, Licitacao, Oportunidade, PerfilEmpresa
+from ..models import Analise, DocumentoAnexo, Licitacao, Oportunidade, PerfilEmpresa, Usuario
+from ..security import exigir_admin, usuario_atual
 from ..services import pipeline
+from ..services.atividade import eventos_recentes, registrar_evento, resumo_atividade
+from ..services.dashboard import montar_dashboard
 
 logger = logging.getLogger(__name__)
 
@@ -109,13 +112,21 @@ def status_pipeline(db: Session = Depends(get_db)):
 
 
 @router.post("/pipeline/executar")
-def executar_pipeline(dias: int = 3, limite_analises: int = 10, db: Session = Depends(get_db)):
+def executar_pipeline(
+    dias: int = 3,
+    limite_analises: int = 10,
+    usuario: Usuario = Depends(usuario_atual),
+    db: Session = Depends(get_db),
+):
     """Roda coleta + análise IA agora."""
+    # registra antes de rodar: a coleta pode levar minutos e até falhar no meio
+    registrar_evento(db, usuario, "coleta_manual", detalhe=f"dias={dias}, limite_analises={limite_analises}")
     return pipeline.executar_pipeline(db, dias=dias, limite_analises=limite_analises)
 
 
 @router.post("/pipeline/coletar")
-def executar_coleta(dias: int = 3, db: Session = Depends(get_db)):
+def executar_coleta(dias: int = 3, usuario: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
+    registrar_evento(db, usuario, "coleta_manual", detalhe=f"apenas coleta, dias={dias}")
     return pipeline.executar_coleta(db, dias=dias)
 
 
@@ -125,10 +136,15 @@ def executar_analises(limite: int = 10, db: Session = Depends(get_db)):
 
 
 @router.post("/licitacoes/{licitacao_id}/reanalisar")
-def reanalisar_licitacao(licitacao_id: int, db: Session = Depends(get_db)):
+def reanalisar_licitacao(
+    licitacao_id: int,
+    usuario: Usuario = Depends(usuario_atual),
+    db: Session = Depends(get_db),
+):
     """Refaz a análise IA de uma licitação (ex.: quando o edital não baixou na 1ª tentativa)."""
     if not db.get(Licitacao, licitacao_id):
         raise HTTPException(404, "Licitação não encontrada")
+    registrar_evento(db, usuario, "reanalise", licitacao_id=licitacao_id)
     return pipeline.executar_analises(db, licitacao_ids=[licitacao_id])
 
 
@@ -153,7 +169,11 @@ class LicitacaoManualIn(BaseModel):
 
 
 @router.post("/licitacoes", status_code=201)
-def criar_licitacao_manual(dados: LicitacaoManualIn, db: Session = Depends(get_db)):
+def criar_licitacao_manual(
+    dados: LicitacaoManualIn,
+    usuario: Usuario = Depends(usuario_atual),
+    db: Session = Depends(get_db),
+):
     """Cadastra uma licitação manualmente (fonte 'manual').
 
     Regra de negócio: registro manual SEMPRE vira oportunidade no pipeline e NÃO
@@ -198,6 +218,8 @@ def criar_licitacao_manual(dados: LicitacaoManualIn, db: Session = Depends(get_d
     db.add(oportunidade)
     db.commit()
 
+    registrar_evento(db, usuario, "cadastro_manual", licitacao_id=lic.id, detalhe=lic.objeto[:200])
+
     out = _licitacao_out(lic, db)
     out["oportunidade_id"] = oportunidade.id
     return out
@@ -211,7 +233,11 @@ class ExtrairIn(BaseModel):
 
 
 @router.post("/licitacoes/extrair")
-def extrair_campos_licitacao(dados: ExtrairIn):
+def extrair_campos_licitacao(
+    dados: ExtrairIn,
+    usuario: Usuario = Depends(usuario_atual),
+    db: Session = Depends(get_db),
+):
     """Extrai os campos do formulário de cadastro a partir de um resumo ou link.
 
     Baixa o conteúdo do link (HTML vira texto; PDF vai direto para a IA) e usa o
@@ -244,6 +270,8 @@ def extrair_campos_licitacao(dados: ExtrairIn):
         raise HTTPException(503, f"IA indisponível no momento: {exc}")
     except RuntimeError as exc:
         raise HTTPException(503, str(exc))
+
+    registrar_evento(db, usuario, "extracao_cadastro", detalhe=(url or "texto colado")[:300])
 
     out = campos.model_dump()
     out["link"] = url
@@ -308,7 +336,11 @@ MAX_ANEXO_BYTES = 25 * 1024 * 1024  # 25 MB por arquivo
 
 
 @router.get("/licitacoes/{licitacao_id}/documentos")
-def listar_documentos(licitacao_id: int, db: Session = Depends(get_db)):
+def listar_documentos(
+    licitacao_id: int,
+    usuario: Usuario = Depends(usuario_atual),
+    db: Session = Depends(get_db),
+):
     """Checklist de documentos de habilitação (da análise IA) + anexos gravados.
 
     Cada item do checklist traz os anexos vinculados (casados pelo texto do documento);
@@ -317,6 +349,9 @@ def listar_documentos(licitacao_id: int, db: Session = Depends(get_db)):
     lic = db.get(Licitacao, licitacao_id)
     if not lic:
         raise HTTPException(404, "Licitação não encontrada")
+
+    # abertura da tela de documentação de uma licitação (não é polling)
+    registrar_evento(db, usuario, "ver_documentos", licitacao_id=licitacao_id)
 
     analise = db.execute(select(Analise).where(Analise.licitacao_id == licitacao_id)).scalar_one_or_none()
     checklist_ia = (analise.documentos_habilitacao if analise else None) or []
@@ -363,6 +398,7 @@ async def anexar_documento(
     licitacao_id: int,
     arquivo: UploadFile,
     item_checklist: str = Form(""),
+    usuario: Usuario = Depends(usuario_atual),
     db: Session = Depends(get_db),
 ):
     """Anexa um arquivo à licitação (multipart). O conteúdo é gravado no SQLite.
@@ -389,14 +425,18 @@ async def anexar_documento(
     )
     db.add(anexo)
     db.commit()
+    registrar_evento(db, usuario, "upload_documento", licitacao_id=licitacao_id,
+                     detalhe=anexo.nome_arquivo)
     return _anexo_out(anexo)
 
 
 @router.get("/documentos/{doc_id}/download")
-def baixar_documento(doc_id: int, db: Session = Depends(get_db)):
+def baixar_documento(doc_id: int, usuario: Usuario = Depends(usuario_atual), db: Session = Depends(get_db)):
     anexo = db.get(DocumentoAnexo, doc_id)
     if not anexo:
         raise HTTPException(404, "Documento não encontrado")
+    registrar_evento(db, usuario, "download_documento", licitacao_id=anexo.licitacao_id,
+                     detalhe=anexo.nome_arquivo)
     nome = quote(anexo.nome_arquivo or "documento")
     return Response(
         content=anexo.conteudo,
@@ -436,30 +476,8 @@ class OportunidadePatch(BaseModel):
     responsavel: str | None = None
 
 
-class OportunidadeIn(BaseModel):
-    licitacao_id: int
-
-
-@router.post("/oportunidades", status_code=201)
-def criar_oportunidade(dados: OportunidadeIn, db: Session = Depends(get_db)):
-    """Cria manualmente uma oportunidade para uma licitação (aba No Go -> Pipeline).
-
-    Permite ao usuário discordar da IA e levar ao kanban uma licitação reprovada.
-    """
-    if not db.get(Licitacao, dados.licitacao_id):
-        raise HTTPException(404, "Licitação não encontrada")
-    existe = db.execute(
-        select(Oportunidade).where(Oportunidade.licitacao_id == dados.licitacao_id)
-    ).scalar_one_or_none()
-    if existe:
-        raise HTTPException(409, "Esta licitação já está no pipeline")
-    op = Oportunidade(
-        licitacao_id=dados.licitacao_id, estagio="identificada",
-        notas="Movida manualmente da aba No Go",
-    )
-    db.add(op)
-    db.commit()
-    return _oportunidade_out(op, db)
+# POST /oportunidades (promoção manual da antiga aba No Go) foi removido: toda
+# licitação coletada já entra no pipeline automaticamente como 'identificada'.
 
 
 @router.get("/oportunidades")
@@ -471,10 +489,16 @@ def listar_oportunidades(estagio: str | None = None, db: Session = Depends(get_d
 
 
 @router.patch("/oportunidades/{oportunidade_id}")
-def atualizar_oportunidade(oportunidade_id: int, patch: OportunidadePatch, db: Session = Depends(get_db)):
+def atualizar_oportunidade(
+    oportunidade_id: int,
+    patch: OportunidadePatch,
+    usuario: Usuario = Depends(usuario_atual),
+    db: Session = Depends(get_db),
+):
     op = db.get(Oportunidade, oportunidade_id)
     if not op:
         raise HTTPException(404, "Oportunidade não encontrada")
+    estagio_anterior = op.estagio
     if patch.estagio is not None:
         if patch.estagio not in Oportunidade.ESTAGIOS:
             raise HTTPException(400, f"Estágio inválido. Use um de: {Oportunidade.ESTAGIOS}")
@@ -484,6 +508,9 @@ def atualizar_oportunidade(oportunidade_id: int, patch: OportunidadePatch, db: S
     if patch.responsavel is not None:
         op.responsavel = patch.responsavel
     db.commit()
+    if patch.estagio is not None and patch.estagio != estagio_anterior:
+        registrar_evento(db, usuario, "mover_estagio", licitacao_id=op.licitacao_id,
+                         detalhe=f"de {estagio_anterior} para {patch.estagio}")
     return _oportunidade_out(op, db)
 
 
@@ -511,6 +538,99 @@ def atualizar_perfil(perfil_in: PerfilIn, db: Session = Depends(get_db)):
         setattr(perfil, campo, valor)
     db.commit()
     return pipeline.perfil_como_dict(perfil)
+
+
+# ---------- Dashboard executivo (report ao CEO) ----------
+
+@router.get("/dashboard")
+def dashboard(
+    dias: int = 30,
+    usuario: Usuario = Depends(usuario_atual),
+    db: Session = Depends(get_db),
+):
+    """Dados agregados da aba Dashboard nos últimos `dias` (clampado 1–365).
+
+    Formato da resposta:
+    {
+      "dias": 30, "gerado_em": "2026-07-15T12:00:00Z",
+      "indicadores": {
+        "licitacoes_coletadas": 42,      // licitações que entraram no período
+        "oportunidades_novas": 40,       // oportunidades criadas no período
+        "valor_em_disputa": 1234567.0,   // soma dos estágios ativos (foto atual)
+        "valor_ganho": 100000.0,         // finalizadas em 'ganhou' no período
+        "valor_perdido": 50000.0,        // finalizadas em 'perdeu_nogo' no período
+        "ganhas": 2, "perdidas": 1,
+        "taxa_vitoria": 66.7             // % ganhas/(ganhas+perdidas); null sem finalizadas
+      },
+      "funil": [{"estagio", "quantidade", "valor"}, ...],  // ordem do kanban, foto atual
+      "por_uf": [{"uf", "quantidade"}, ...],               // licitações do período, desc
+      "por_fonte": [{"fonte", "quantidade"}, ...],         // pncp/fiesc/fiergs/fiems/manual
+      "classificacoes": [{"classificacao", "quantidade"}, ...],  // IA + "SEM ANÁLISE"
+      "vencimentos_proximos": [{oportunidade_id, licitacao_id, orgao, municipio, uf,
+                                objeto, valor_estimado, data_encerramento,
+                                dias_restantes, estagio}, ...],  // ativas, <= 14 dias
+      "coletas_por_dia": [{"dia": "2026-07-01", "quantidade": 3}, ...],  // série contínua
+      "atividade": {"usuarios": [...]}   // só quando o usuário é admin (resumo_atividade)
+    }
+    Qualquer usuário autenticado acessa; o bloco "atividade" só vai para admin.
+    """
+    dias = max(1, min(dias, 365))
+    dados = montar_dashboard(db, dias)
+    if usuario.is_admin:
+        dados["atividade"] = {"usuarios": resumo_atividade(db, dias)}
+    return dados
+
+
+# ---------- Atividade dos usuários (só admin) ----------
+
+@router.get("/admin/atividade")
+def atividade_resumo(
+    dias: int = 30,
+    _: Usuario = Depends(exigir_admin),
+    db: Session = Depends(get_db),
+):
+    """Resumo de atividade por usuário nos últimos `dias` (aba Atividade e dashboard).
+
+    Formato da resposta (estável — o dashboard também consome):
+    {
+      "dias": 30,
+      "usuarios": [
+        {
+          "usuario_id": 1, "nome": "...", "email": "...", "ativo": true,
+          "ultimo_acesso": "2026-07-15T12:00:00Z" | null,
+          "total_eventos": 42,           // eventos no período
+          "licitacoes_distintas": 7,     // licitações diferentes acessadas
+          "tempo_uso_minutos": 95,       // estimativa: gaps < 30 min somam; maiores contam 1 min
+          "eventos_por_tipo": {"login": 3, "ver_documentos": 12, ...}
+        }, ...
+      ]
+    }
+    Ordenado por total_eventos desc; inclui usuários sem eventos no período.
+    """
+    dias = max(1, min(dias, 365))
+    return {"dias": dias, "usuarios": resumo_atividade(db, dias)}
+
+
+@router.get("/admin/atividade/eventos")
+def atividade_eventos(
+    usuario_id: int | None = None,
+    dias: int = 30,
+    limit: int = 100,
+    _: Usuario = Depends(exigir_admin),
+    db: Session = Depends(get_db),
+):
+    """Eventos recentes (desc), opcionalmente filtrados por usuário.
+
+    Cada evento: id, usuario_id, usuario_nome, tipo, licitacao_id,
+    licitacao_objeto/licitacao_orgao (null quando não há licitação vinculada),
+    detalhe e criado_em (ISO UTC com Z).
+    """
+    dias = max(1, min(dias, 365))
+    limit = max(1, min(limit, 500))
+    return {
+        "dias": dias,
+        "eventos": eventos_recentes(db, usuario_id=usuario_id, dias=dias, limit=limit),
+    }
 
 
 # ---------- Serializadores ----------
@@ -545,6 +665,8 @@ def _licitacao_out(l: Licitacao, db: Session, incluir_raw: bool = False):
         "valor_estimado": l.valor_estimado, "data_abertura": l.data_abertura,
         "data_encerramento": l.data_encerramento, "link": l.link,
         "status_analise": l.status_analise, "analise": _analise_out(analise),
+        # Data de identificação da licitação (quando entrou no sistema)
+        "criado_em": l.criado_em.isoformat() if l.criado_em else None,
     }
     if incluir_raw:
         out["raw"] = l.raw_json

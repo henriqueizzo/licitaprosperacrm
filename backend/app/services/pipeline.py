@@ -71,12 +71,16 @@ def executar_coleta(db: Session, dias: int = 3) -> dict:
             ).scalar_one_or_none()
             if existe:
                 continue
-            db.add(Licitacao(
+            lic = Licitacao(
                 fonte=c.fonte, id_externo=c.id_externo, orgao=c.orgao, municipio=c.municipio,
                 uf=c.uf, modalidade=c.modalidade, objeto=c.objeto, valor_estimado=c.valor_estimado,
                 data_abertura=c.data_abertura, data_encerramento=c.data_encerramento,
                 link=c.link, edital_url=c.edital_url, raw_json=c.raw,
-            ))
+            )
+            db.add(lic)
+            # TODA licitação coletada entra no pipeline como 'identificada' — a análise
+            # IA apenas informa o card; quem descarta é o humano (estágio perdeu_nogo).
+            db.add(Oportunidade(licitacao=lic, estagio="identificada"))
             novas += 1
     db.commit()
     resultado = {"novas_licitacoes": novas}
@@ -86,9 +90,11 @@ def executar_coleta(db: Session, dias: int = 3) -> dict:
 
 
 def executar_analises(db: Session, limite: int = 10, licitacao_ids: list[int] | None = None) -> dict:
-    """Analisa licitações pendentes com a IA; cria oportunidade se o score passar do corte.
+    """Analisa licitações pendentes com a IA e grava a recomendação na Analise.
 
-    Se `licitacao_ids` for passado, reanalisa essas licitações (removendo a análise anterior).
+    A recomendação NÃO decide quem entra no pipeline: toda licitação já vira
+    oportunidade na coleta. Se `licitacao_ids` for passado, reanalisa essas
+    licitações (removendo a análise anterior).
     """
     if not provedor_ativo():
         return {"erro": "Nenhum provedor de IA configurado (GEMINI_API_KEY ou ANTHROPIC_API_KEY) — análise IA desativada"}
@@ -169,20 +175,15 @@ def executar_analises(db: Session, limite: int = 10, licitacao_ids: list[int] | 
         lic.status_analise = "analisada"
         analisadas += 1
 
-        # Cria oportunidade quando: credenciamento viável, classificação não é
-        # NÃO RECOMENDADO e o MAIOR dos dois scores (na escala 0-100) passa do corte.
-        cria_oportunidade = (
-            resultado.credenciamento_viavel
-            and resultado.classificacao_final != "NÃO RECOMENDADO"
-            and score_100 >= settings.score_minimo_oportunidade
-        )
-        if cria_oportunidade:
-            ja_existe = db.execute(
-                select(Oportunidade).where(Oportunidade.licitacao_id == lic.id)
-            ).scalar_one_or_none()
-            if not ja_existe:
-                db.add(Oportunidade(licitacao_id=lic.id, estagio="identificada"))
-                oportunidades += 1
+        # Toda licitação já entra no pipeline na coleta — aqui só garantimos a
+        # oportunidade para registros antigos que porventura ainda não tenham
+        # (defensivo; a recomendação da IA aparece no card, mas não filtra ninguém).
+        ja_existe = db.execute(
+            select(Oportunidade).where(Oportunidade.licitacao_id == lic.id)
+        ).scalar_one_or_none()
+        if not ja_existe:
+            db.add(Oportunidade(licitacao_id=lic.id, estagio="identificada"))
+            oportunidades += 1
         db.commit()
 
     resultado = {"analisadas": analisadas, "oportunidades_criadas": oportunidades, "erros": erros}
@@ -198,6 +199,11 @@ def executar_pipeline(db: Session, dias: int = 3, limite_analises: int = 10,
     # Avisos vêm das duas etapas — junta as listas (o merge de dicts sobrescreveria)
     avisos = list(coleta.get("avisos") or []) + list(analises.get("avisos") or [])
     resultado = {**coleta, **analises}
+    # Oportunidades agora nascem na coleta (1 por licitação nova); a análise só
+    # cria as defensivas de registros antigos — soma as duas origens no contador.
+    resultado["oportunidades_criadas"] = (
+        coleta.get("novas_licitacoes", 0) + analises.get("oportunidades_criadas", 0)
+    )
     if avisos:
         resultado["avisos"] = avisos
     # Registra a execução (alimenta o status "última/próxima coleta" do cabeçalho).

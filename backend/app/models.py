@@ -20,6 +20,8 @@ class Usuario(Base):
     is_admin: Mapped[bool] = mapped_column(Boolean, default=False)
     ativo: Mapped[bool] = mapped_column(Boolean, default=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    # Atualizado pela dependency de auth no máximo 1x por minuto (não escreve a cada request)
+    ultimo_acesso: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     sessoes: Mapped[list["Sessao"]] = relationship(back_populates="usuario", cascade="all, delete-orphan")
 
@@ -36,6 +38,25 @@ class Sessao(Base):
     expira_em: Mapped[datetime] = mapped_column(DateTime)
 
     usuario: Mapped[Usuario] = relationship(back_populates="sessoes")
+
+
+class EventoUso(Base):
+    """Evento de uso do sistema (alimenta a aba Atividade e o dashboard, só admin).
+
+    `tipo` é um valor controlado por código (login, ver_documentos, download_documento,
+    upload_documento, mover_estagio, cadastro_manual, coleta_manual, reanalise,
+    extracao_cadastro). Rotas de listagem/polling NÃO geram evento, para não inflar
+    a tabela. `detalhe` é texto livre montado pelo código — Text por segurança.
+    """
+
+    __tablename__ = "eventos_uso"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    usuario_id: Mapped[int] = mapped_column(ForeignKey("usuarios.id"), index=True)
+    tipo: Mapped[str] = mapped_column(String(40))
+    licitacao_id: Mapped[int | None] = mapped_column(ForeignKey("licitacoes.id"), nullable=True)
+    detalhe: Mapped[str] = mapped_column(Text, default="")
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, index=True)
 
 
 class Licitacao(Base):
@@ -123,7 +144,10 @@ class Oportunidade(Base):
 
     __tablename__ = "oportunidades"
 
-    ESTAGIOS = ["identificada", "em_analise", "proposta", "disputa", "ganhou", "perdeu", "descartada"]
+    ESTAGIOS = [
+        "identificada", "em_analise", "impugnacao", "proposta_enviada",
+        "disputa", "ganhou", "perdeu_nogo",
+    ]
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     licitacao_id: Mapped[int] = mapped_column(ForeignKey("licitacoes.id"))

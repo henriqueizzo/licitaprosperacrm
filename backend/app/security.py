@@ -106,6 +106,23 @@ def limpar_cookie_sessao(response: Response) -> None:
 
 # ---------- Dependencies ----------
 
+def _tocar_ultimo_acesso(db: Session, usuario: Usuario) -> None:
+    """Atualiza Usuario.ultimo_acesso no máximo 1x por minuto (evita um UPDATE
+    a cada request) e nunca quebra a autenticação em caso de falha de escrita."""
+    agora = datetime.utcnow()
+    if usuario.ultimo_acesso and (agora - usuario.ultimo_acesso) < timedelta(minutes=1):
+        return
+    try:
+        usuario.ultimo_acesso = agora
+        db.commit()
+    except Exception:
+        logger.warning("Falha ao atualizar ultimo_acesso do usuário %s", usuario.id, exc_info=True)
+        try:
+            db.rollback()
+        except Exception:
+            pass
+
+
 def usuario_atual(
     sessao: str | None = Cookie(default=None),
     db: Session = Depends(get_db),
@@ -116,6 +133,7 @@ def usuario_atual(
     usuario = usuario_da_sessao(db, sessao)
     if not usuario:
         raise HTTPException(401, "Sessão inválida ou expirada")
+    _tocar_ultimo_acesso(db, usuario)
     return usuario
 
 

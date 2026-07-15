@@ -30,12 +30,12 @@ const post = (body) => ({
 })
 
 export const api = {
+  // Dashboard executivo (bloco "atividade" só vem para admin)
+  dashboard: (dias = 30) => req(`/api/dashboard?dias=${dias}`),
   licitacoes: (params = '') => req(`/api/licitacoes${params}`),
   criarLicitacao: (dados) => req('/api/licitacoes', post(dados)),
   extrairLicitacao: (texto, url) => req('/api/licitacoes/extrair', post({ texto, url })),
   oportunidades: () => req('/api/oportunidades'),
-  criarOportunidade: (licitacaoId) =>
-    req('/api/oportunidades', post({ licitacao_id: licitacaoId })),
   moverOportunidade: (id, estagio) =>
     req(`/api/oportunidades/${id}`, { ...post({ estagio }), method: 'PATCH' }),
   perfil: () => req('/api/perfil'),
@@ -65,4 +65,12 @@ export const api = {
   usuarios: () => req('/api/usuarios'),
   criarUsuario: (dados) => req('/api/usuarios', post(dados)),
   atualizarUsuario: (id, patch) => req(`/api/usuarios/${id}`, { ...post(patch), method: 'PATCH' }),
+
+  // Atividade dos usuários (só admin)
+  atividade: (dias = 30) => req(`/api/admin/atividade?dias=${dias}`),
+  atividadeEventos: ({ usuarioId = null, dias = 30, limit = 100 } = {}) => {
+    const p = new URLSearchParams({ dias, limit })
+    if (usuarioId) p.set('usuario_id', usuarioId)
+    return req(`/api/admin/atividade/eventos?${p}`)
+  },
 }

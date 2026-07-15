@@ -30,7 +30,8 @@ class Settings(BaseSettings):
             return "postgresql+psycopg2://" + v[len("postgresql://"):]
         return v
     coleta_intervalo_horas: int = 6
-    score_minimo_oportunidade: int = 60
+    # score_minimo_oportunidade foi removido: toda licitação coletada entra no
+    # pipeline; a análise IA só informa o card (extra="ignore" cobre .env antigos)
 
     # Modelo usado na análise dos editais
     claude_model: str = "claude-opus-4-8"

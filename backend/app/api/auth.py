@@ -1,5 +1,6 @@
 """Rotas de autenticação e administração de usuários."""
 import time
+from datetime import datetime
 
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Response
 from pydantic import BaseModel
@@ -20,6 +21,7 @@ from ..security import (
     usuario_atual,
     verificar_senha,
 )
+from ..services.atividade import registrar_evento
 
 router = APIRouter(prefix="/api")
 
@@ -54,6 +56,9 @@ def login(dados: LoginIn, response: Response, db: Session = Depends(get_db)):
         raise HTTPException(401, "Credenciais inválidas")
     token = criar_sessao(db, usuario)
     definir_cookie_sessao(response, token)
+    # ultimo_acesso é persistido junto com o commit de registrar_evento
+    usuario.ultimo_acesso = datetime.utcnow()
+    registrar_evento(db, usuario, "login")
     return {"nome": usuario.nome, "email": usuario.email, "is_admin": usuario.is_admin}
 
 

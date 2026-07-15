@@ -16,6 +16,13 @@ const FORM_VAZIO = {
   responsavel: '',
 }
 
+// ISO (YYYY-MM-DD ou datetime) → DD/MM/AAAA
+const dataBr = (iso) => {
+  if (!iso) return null
+  const [a, m, d] = String(iso).slice(0, 10).split('-')
+  return a && m && d ? `${d}/${m}/${a}` : null
+}
+
 const MODALIDADES = [
   'Pregão Eletrônico', 'Pregão Presencial', 'Concorrência', 'Dispensa de Licitação',
   'Inexigibilidade', 'Credenciamento', 'Leilão', 'Diálogo Competitivo',
@@ -77,7 +84,12 @@ export default function CadastroManual() {
         valor_estimado: form.valor_estimado === '' ? null : Number(form.valor_estimado),
         edital_url: form.link,
       })
-      setMsg(`✅ Licitação cadastrada (nº ${r.id_externo}) e adicionada ao Pipeline.`)
+      const identificada = dataBr(r.criado_em)
+      setMsg(
+        `✅ Licitação cadastrada (nº ${r.id_externo})` +
+        (identificada ? ` — identificada em ${identificada}` : '') +
+        ' — e adicionada ao Pipeline.'
+      )
       setForm(FORM_VAZIO)
       setResumo('')
       setLinkAuto('')
@@ -153,7 +165,7 @@ export default function CadastroManual() {
           <input type="date" value={form.data_abertura} onChange={set('data_abertura')} />
         </label>
         <label>
-          Data de encerramento (prazo)
+          Data de vencimento (limite de propostas)
           <input type="date" value={form.data_encerramento} onChange={set('data_encerramento')} />
         </label>
         <label>

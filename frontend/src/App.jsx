@@ -1,18 +1,19 @@
 import { useEffect, useState } from 'react'
+import Dashboard from './components/Dashboard.jsx'
 import Pipeline from './components/Pipeline.jsx'
 import Licitacoes from './components/Licitacoes.jsx'
-import NoGo from './components/NoGo.jsx'
 import CadastroManual from './components/CadastroManual.jsx'
 import Perfil from './components/Perfil.jsx'
 import Usuarios from './components/Usuarios.jsx'
+import Atividade from './components/Atividade.jsx'
 import Login from './components/Login.jsx'
 import TrocarSenha from './components/TrocarSenha.jsx'
 import { api, definirAo401 } from './api.js'
 
 const ABAS = [
+  { id: 'dashboard', rotulo: 'Dashboard' },
   { id: 'pipeline', rotulo: 'Pipeline' },
   { id: 'licitacoes', rotulo: 'Licitações' },
-  { id: 'nogo', rotulo: 'No Go' },
   { id: 'cadastro', rotulo: 'Cadastro Manual' },
   { id: 'perfil', rotulo: 'Perfil da Empresa' },
 ]
@@ -27,7 +28,7 @@ function tempoRelativo(iso, futuro = false) {
 
 export default function App() {
   const [usuario, setUsuario] = useState(undefined) // undefined=verificando | null=deslogado
-  const [aba, setAba] = useState('pipeline')
+  const [aba, setAba] = useState('dashboard') // tela inicial após o login
   const [rodando, setRodando] = useState(false)
   const [msg, setMsg] = useState('')
   const [trocandoSenha, setTrocandoSenha] = useState(false)
@@ -55,7 +56,7 @@ export default function App() {
       /* mesmo com falha, volta para o login */
     }
     setUsuario(null)
-    setAba('pipeline')
+    setAba('dashboard')
     setMsg('')
   }
 
@@ -84,7 +85,9 @@ export default function App() {
     return <Login aoEntrar={(u) => setUsuario(u)} />
   }
 
-  const abas = usuario.is_admin ? [...ABAS, { id: 'usuarios', rotulo: 'Usuários' }] : ABAS
+  const abas = usuario.is_admin
+    ? [...ABAS, { id: 'usuarios', rotulo: 'Usuários' }, { id: 'atividade', rotulo: 'Atividade' }]
+    : ABAS
 
   return (
     <div className="app">
@@ -134,12 +137,13 @@ export default function App() {
       </header>
       {msg && <div className="banner">{msg}</div>}
       <main>
+        {aba === 'dashboard' && <Dashboard />}
         {aba === 'pipeline' && <Pipeline />}
         {aba === 'licitacoes' && <Licitacoes />}
-        {aba === 'nogo' && <NoGo />}
         {aba === 'cadastro' && <CadastroManual />}
         {aba === 'perfil' && <Perfil />}
         {aba === 'usuarios' && usuario.is_admin && <Usuarios usuarioLogado={usuario} />}
+        {aba === 'atividade' && usuario.is_admin && <Atividade />}
       </main>
       {trocandoSenha && <TrocarSenha aoFechar={() => setTrocandoSenha(false)} />}
     </div>

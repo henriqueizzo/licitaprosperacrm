@@ -41,7 +41,20 @@ def _migracoes(dialeto: str) -> dict[str, dict[str, str]]:
         "execucoes_pipeline": {
             "avisos": "JSON",
         },
+        # Último acesso do usuário (aba Atividade). TIMESTAMP vale nos dois dialetos.
+        "usuarios": {
+            "ultimo_acesso": "TIMESTAMP",
+        },
     }
+
+
+# Estágios do pipeline renomeados/unificados (kanban novo). UPDATEs idempotentes
+# (o WHERE só casa com valores antigos) e em SQL simples, válido em SQLite e Postgres.
+_RENOMEACOES_ESTAGIOS = [
+    ("proposta", "proposta_enviada"),
+    ("perdeu", "perdeu_nogo"),
+    ("descartada", "perdeu_nogo"),
+]
 
 
 # Colunas que nasceram String(N) mas recebem texto livre: alargar para TEXT.
@@ -70,6 +83,29 @@ def migrar_esquema() -> list[str]:
                 if coluna not in existentes:
                     conn.execute(text(f"ALTER TABLE {tabela} ADD COLUMN {coluna} {ddl}"))
                     criadas.append(f"{tabela}.{coluna}")
+        if "oportunidades" in tabelas:
+            for antigo, novo in _RENOMEACOES_ESTAGIOS:
+                res = conn.execute(
+                    text("UPDATE oportunidades SET estagio = :novo WHERE estagio = :antigo"),
+                    {"novo": novo, "antigo": antigo},
+                )
+                if res.rowcount:
+                    criadas.append(f"estagio:{antigo}->{novo}({res.rowcount})")
+
+            # Fim da aba "No Go": toda licitação entra no pipeline. Backfill para
+            # licitações represadas sem oportunidade (produção). Idempotente — o
+            # NOT EXISTS só cria o que falta — e em SQL válido em SQLite e Postgres.
+            if "licitacoes" in tabelas:
+                res = conn.execute(text(
+                    "INSERT INTO oportunidades "
+                    "(licitacao_id, estagio, notas, responsavel, criado_em, atualizado_em) "
+                    "SELECT l.id, 'identificada', 'Backfill: entrada automática no pipeline', '', "
+                    "CURRENT_TIMESTAMP, CURRENT_TIMESTAMP "
+                    "FROM licitacoes l "
+                    "WHERE NOT EXISTS (SELECT 1 FROM oportunidades o WHERE o.licitacao_id = l.id)"
+                ))
+                if res.rowcount:
+                    criadas.append(f"backfill_oportunidades({res.rowcount})")
         if engine.dialect.name != "sqlite":
             for (tabela, coluna), tipo in _ALARGAMENTOS.items():
                 if tabela not in tabelas:

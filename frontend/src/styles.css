@@ -262,6 +262,98 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 @keyframes led-pulse { 50% { opacity: 0.35; } }
 @media (prefers-reduced-motion: reduce) { .led { animation: none; } }
 
+/* ---------- Busca e filtros (Pipeline e Licitações) ---------- */
+.barra-busca {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.campo-busca {
+  position: relative;
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 220px;
+  max-width: 440px;
+}
+.campo-busca-lupa {
+  position: absolute;
+  left: 12px;
+  width: 15px;
+  height: 15px;
+  color: var(--texto-mudo);
+  pointer-events: none;
+}
+.campo-busca input {
+  width: 100%;
+  font-family: var(--corpo);
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--texto);
+  background: var(--campo-fundo);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-sm);
+  padding: 8px 34px 8px 34px;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.campo-busca input::placeholder { color: var(--texto-mudo); }
+.campo-busca input:hover { border-color: #94a3b8; }
+.campo-busca input:focus {
+  outline: none;
+  border-color: var(--azul-luz);
+  box-shadow: var(--foco);
+}
+.campo-busca-limpar {
+  position: absolute;
+  right: 8px;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--texto-suave);
+  font-size: 0.9rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.campo-busca-limpar:hover { background: var(--azul-suave); color: var(--azul-texto); }
+.campo-busca-limpar:focus-visible { outline: none; box-shadow: var(--foco); }
+.filtro-uf {
+  font-family: var(--corpo);
+  font-size: 0.85rem;
+  font-weight: 400;
+  color: var(--texto);
+  background: var(--campo-fundo);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio-sm);
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.filtro-uf:hover { border-color: #94a3b8; }
+.filtro-uf:focus {
+  outline: none;
+  border-color: var(--azul-luz);
+  box-shadow: var(--foco);
+}
+.busca-contagem {
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--azul-texto);
+  background: var(--azul-suave);
+  border: 1px solid #bfdbfe;
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Kanban (Pipeline) ---------- */
 .kanban { display: flex; gap: 14px; overflow-x: auto; align-items: flex-start; padding-bottom: 14px; }
 .coluna {
@@ -296,17 +388,83 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
   background: var(--panel);
   border: 1px solid var(--linha);
   border-radius: var(--raio-sm);
-  padding: 12px 14px;
-  margin-bottom: 10px;
-  font-size: 0.82rem;
+  padding: 9px 11px;
+  margin-bottom: 8px;
+  font-size: 0.78rem;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 .cartao:hover { border-color: #93c5fd; box-shadow: 0 4px 12px -4px rgba(15, 23, 42, 0.12); }
-.cartao-topo { display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
-.cartao-topo strong { font-family: var(--display); font-weight: 600; font-size: 0.82rem; color: var(--texto); }
-.cartao p { margin: 4px 0; color: var(--texto-suave); font-size: 0.79rem; line-height: 1.45; }
-.cartao small { color: var(--texto-mudo); font-size: 0.72rem; font-variant-numeric: tabular-nums; }
+.cartao-topo { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 3px; }
+/* Título em 1 linha: órgão — município/UF (texto completo no title) */
+.cartao-titulo {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 0.78rem;
+  color: var(--texto);
+}
+/* Resumo do objeto sempre em 2 linhas — cartões com altura padronizada */
+.cartao-resumo {
+  margin: 0 0 6px;
+  color: var(--texto-suave);
+  font-size: 0.74rem;
+  line-height: 1.35;
+  min-height: 2.7em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+/* Recomendação da IA: badge pastel + scores B/P em 1 linha */
+.cartao-ia { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; min-width: 0; }
+.cartao-ia .veredito { padding: 2px 8px; font-size: 0.66rem; overflow: hidden; text-overflow: ellipsis; }
+.cartao-scores {
+  color: var(--texto-mudo);
+  font-size: 0.68rem;
+  font-weight: 600;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+/* Metadados discretos: valor compacto • identificada • vencimento */
+.cartao-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1px 6px;
+  color: var(--texto-mudo);
+  font-size: 0.7rem;
+  font-variant-numeric: tabular-nums;
+}
+.cartao-meta span + span::before { content: '• '; color: var(--texto-mudo); font-weight: 400; }
+.cartao-valor { color: var(--texto-suave); font-weight: 600; }
+
+/* Alerta de prazo no cartão (proximidade do vencimento) — pastel com texto escuro do matiz */
+.cartao.prazo-amarelo,
+.cartao.prazo-amarelo:hover { border-color: var(--amarelo-borda); background: var(--amarelo-fundo); }
+.cartao.prazo-amarelo .cartao-venc { color: var(--amarelo-texto); font-weight: 600; }
+.cartao.prazo-vermelho,
+.cartao.prazo-vermelho:hover { border-color: var(--vermelho-borda); background: var(--vermelho-fundo); }
+.cartao.prazo-vermelho .cartao-venc { color: var(--vermelho-texto); font-weight: 600; }
+/* Vencida: apagado/neutro (sem gritar), com selo discreto */
+.cartao.prazo-vencida { opacity: 0.6; background: var(--panel-2); }
+.selo-vencida {
+  background: var(--panel-2);
+  border: 1px solid var(--linha);
+  color: var(--texto-mudo);
+  border-radius: 999px;
+  padding: 1px 8px;
+  font-size: 0.64rem;
+  font-weight: 600;
+  height: fit-content;
+  white-space: nowrap;
+  flex: none;
+}
 .acoes { display: flex; justify-content: space-between; gap: 6px; margin-top: 10px; }
+.cartao .acoes { margin-top: 7px; }
+.cartao .acoes button, .cartao .acoes a { padding: 3px 8px; font-size: 0.7rem; }
 .acoes button, .acoes a {
   font-family: var(--corpo);
   font-size: 0.74rem;
@@ -383,11 +541,13 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 .veredito.verde { background: var(--verde-fundo); color: var(--verde-texto); border-color: var(--verde-borda); }
 .veredito.vermelho { background: var(--vermelho-fundo); color: var(--vermelho-texto); border-color: var(--vermelho-borda); }
 .veredito.amarelo { background: var(--amarelo-fundo); color: var(--amarelo-texto); border-color: var(--amarelo-borda); }
+.veredito.azul { background: var(--azul-suave); color: var(--azul-texto); border-color: #bfdbfe; }
+.veredito.cinza { background: var(--panel-2); color: var(--texto-mudo); border-color: var(--linha); }
 .pendente { color: #64748b; font-size: 0.75rem; font-weight: 500; }
 
-/* Aba No Go */
-.acoes-nogo { display: inline-flex; gap: 6px; }
-.acoes-nogo button:disabled { opacity: 0.5; cursor: wait; }
+/* Ações inline nas linhas de tabela (aba Licitações) */
+.acoes-linha { display: inline-flex; gap: 6px; }
+.acoes-linha button:disabled { opacity: 0.5; cursor: wait; }
 
 /* ---------- Formulários (Perfil / Cadastro Manual) ---------- */
 .perfil {
@@ -816,4 +976,246 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
   .docs-avulso-form input[type='text'] { min-width: 140px; }
   .doc-anexo a { max-width: 160px; }
   .login-card { padding: 28px 22px 24px; }
+}
+
+/* ---------- Aba Atividade (só admin) ---------- */
+.atividade { display: flex; flex-direction: column; gap: 18px; }
+.atividade-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.atividade-legenda { font-size: 0.8rem; color: var(--texto-suave); max-width: 640px; }
+
+/* Seletor de período: mesmo controle segmentado das abas do cabeçalho */
+.segmentado {
+  display: flex;
+  gap: 4px;
+  background: #f1f5f9;
+  border-radius: var(--raio-sm);
+  padding: 4px;
+  width: fit-content;
+}
+.segmentado button {
+  font-family: var(--display);
+  font-weight: 500;
+  font-size: 0.83rem;
+  border: none;
+  background: transparent;
+  padding: 6px 14px;
+  border-radius: 9px;
+  cursor: pointer;
+  color: #64748b;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+.segmentado button:hover { color: var(--texto); }
+.segmentado button:focus-visible { outline: none; box-shadow: var(--foco); }
+.segmentado button.ativo {
+  color: var(--texto);
+  font-weight: 600;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+}
+
+.atividade tr.clicavel { cursor: pointer; }
+.atividade tr.selecionada td { background: var(--azul-suave); }
+.atividade-tipos { display: flex; flex-wrap: wrap; gap: 4px; max-width: 420px; }
+.atividade-pilula { font-size: 0.68rem; padding: 2px 8px; }
+.atividade-detalhe { color: var(--texto-mudo); font-size: 0.78rem; font-weight: 400; }
+.atividade-obj {
+  max-width: 340px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.atividade-eventos strong { font-family: var(--display); color: var(--texto); font-size: 0.95rem; }
+.atividade-eventos .tabela { box-shadow: none; }
+
+/* ---------- Aba Dashboard (report executivo) ---------- */
+.dashboard { display: flex; flex-direction: column; gap: 16px; }
+.dash-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.dash-legenda { font-size: 0.8rem; color: var(--texto-suave); }
+.dash-controles { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+.dash-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.dash-grade.tres { grid-template-columns: repeat(3, 1fr); }
+.dash-cartao {
+  background: var(--panel);
+  border: 1px solid var(--linha);
+  border-radius: var(--raio);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.dash-cartao h3 {
+  font-family: var(--display);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--texto);
+  margin-bottom: 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.dash-cartao h3 small { font-size: 0.7rem; font-weight: 500; color: var(--texto-mudo); }
+.dash-vazio { color: var(--texto-mudo); font-size: 0.8rem; padding: 12px 0; }
+
+/* KPIs coloridos (verde = ganho, vermelho = perdido) — texto escuro do matiz */
+.tile-v.verde { color: var(--verde-texto); }
+.tile-v.vermelho { color: var(--vermelho-texto); }
+
+/* Barras horizontais (funil e distribuições): pastel + número sempre visível */
+.dash-barra {
+  display: grid;
+  grid-template-columns: 128px 1fr auto;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.dash-barra-rotulo {
+  font-size: 0.76rem;
+  font-weight: 500;
+  color: var(--texto-suave);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dash-barra-trilho {
+  height: 12px;
+  background: var(--panel-2);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.dash-barra-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: #93c5fd; /* azul pastel (série neutra) */
+  transition: width 0.25s ease;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.dash-barra-fill.verde { background: #6ee7b7; }
+.dash-barra-fill.vermelho { background: #fca5a5; }
+.dash-barra-fill.amarelo { background: #fcd34d; }
+.dash-barra-fill.cinza { background: #cbd5e1; }
+.dash-barra-num {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--texto);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.dash-barra-num small { font-weight: 500; color: var(--texto-mudo); }
+
+/* Barras verticais (coletas por dia/semana) */
+.dash-vbarras {
+  display: flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 130px;
+  padding-top: 16px; /* espaço para o número acima da barra mais alta */
+  border-bottom: 1px solid var(--linha-suave);
+}
+.dash-vbar {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 2px;
+}
+.dash-vbar-fill {
+  width: 100%;
+  max-width: 34px;
+  background: #93c5fd;
+  border-radius: 3px 3px 0 0;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+.dash-vbar-num {
+  font-size: 0.62rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.dash-vbar-eixo { display: flex; gap: 3px; margin-top: 4px; }
+.dash-vbar-dia {
+  flex: 1;
+  min-width: 0;
+  text-align: center;
+  font-size: 0.6rem;
+  color: var(--texto-mudo);
+  white-space: nowrap;
+  overflow: visible;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tabelas do dashboard (vencimentos e atividade) — mais compactas */
+.dash-tabela th, .dash-tabela td { padding: 9px 12px; font-size: 0.8rem; }
+.dash-orgao { font-weight: 600; color: var(--texto); }
+.dash-orgao-local { font-weight: 400; color: var(--texto-suave); }
+.dash-objeto {
+  color: var(--texto-mudo);
+  font-size: 0.74rem;
+  font-weight: 400;
+  max-width: 420px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 1000px) {
+  .dash-grade, .dash-grade.tres { grid-template-columns: 1fr; }
+  .dash-barra { grid-template-columns: 96px 1fr auto; }
+  .dash-vbar-dia { font-size: 0.55rem; }
+}
+
+/* ---------- Impressão (report em PDF para o CEO) ---------- */
+@media print {
+  body { background: #fff; }
+  .app { max-width: none; padding: 0; }
+
+  /* Só o conteúdo do report: some navegação, ações e controles interativos */
+  nav,
+  .acao-pipeline,
+  .usuario-area,
+  .banner,
+  .dash-controles { display: none !important; }
+
+  header {
+    position: static;
+    border: none;
+    box-shadow: none;
+    padding: 0 0 12px;
+    backdrop-filter: none;
+  }
+
+  .tile, .dash-cartao, .tabela {
+    box-shadow: none;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .cockpit { grid-template-columns: repeat(3, 1fr); }
+  .dash-grade, .dash-grade.tres { grid-template-columns: 1fr 1fr; }
+
+  /* Cores das barras e pílulas preservadas no PDF */
+  .dash-barra-fill, .dash-vbar-fill, .veredito, .tile {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
 }
