@@ -130,7 +130,8 @@ export default function Pipeline() {
           .filter(Boolean).join(' — ')}
         aoFechar={() => setDetalheLic(null)}
       >
-        <DetalhesLicitacao licitacao={detalheLic} aoMudar={carregar} />
+        <DetalhesLicitacao licitacao={detalheLic} aoMudar={carregar}
+          aoFechar={() => setDetalheLic(null)} />
       </Janela>
     )}
     <div className="cockpit">

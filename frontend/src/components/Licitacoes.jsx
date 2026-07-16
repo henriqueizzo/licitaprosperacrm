@@ -179,7 +179,8 @@ export default function Licitacoes() {
             {aberta === l.id && (
               <tr className="detalhe">
                 <td colSpan={8}>
-                  <DetalhesLicitacao licitacao={l} aoMudar={carregar} />
+                  <DetalhesLicitacao licitacao={l} aoMudar={carregar}
+                    aoFechar={() => setAberta(null)} />
                 </td>
               </tr>
             )}

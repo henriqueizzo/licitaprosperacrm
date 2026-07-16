@@ -9,7 +9,15 @@ from ..analyzer import ErroCotaIA, criar_analisador, provedor_ativo
 from ..collectors import coletores_ativos
 from ..collectors.pncp import PNCPCollector
 from ..config import settings
-from ..models import PERFIL_PADRAO, Analise, ExecucaoPipeline, Licitacao, Oportunidade, PerfilEmpresa
+from ..models import (
+    PERFIL_PADRAO,
+    Analise,
+    ExecucaoPipeline,
+    Licitacao,
+    LicitacaoExcluida,
+    Oportunidade,
+    PerfilEmpresa,
+)
 from .dedupe import eh_espelho_de_existente
 
 logger = logging.getLogger(__name__)
@@ -79,6 +87,15 @@ def executar_coleta(db: Session, dias: int = 3) -> dict:
                 select(Licitacao).where(Licitacao.fonte == c.fonte, Licitacao.id_externo == c.id_externo)
             ).scalar_one_or_none()
             if existe:
+                continue
+            # Excluída de propósito pelo time (lápide): não trazer de volta
+            excluida = db.execute(
+                select(LicitacaoExcluida).where(
+                    LicitacaoExcluida.fonte == c.fonte,
+                    LicitacaoExcluida.id_externo == c.id_externo,
+                )
+            ).scalar_one_or_none()
+            if excluida:
                 continue
             # Mesmo pregão publicado por outra plataforma (numeroControlePNCP
             # diferente): não insere o espelho — ver services/dedupe.py.

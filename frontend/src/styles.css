@@ -1317,3 +1317,15 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
   .janela-corpo { padding: 12px 14px 16px; }
   .janela-min { left: 16px; max-width: none; }
 }
+
+/* Botao de excluir licitacao (detalhes) */
+.detalhes-acoes .btn-excluir {
+  color: var(--vermelho-texto, #b91c1c);
+  border-color: var(--vermelho-borda, #fecaca);
+  background: var(--vermelho-fundo, #fef2f2);
+  margin-left: auto;
+}
+.detalhes-acoes .btn-excluir:hover {
+  border-color: var(--vermelho-texto, #b91c1c);
+  color: var(--vermelho-texto, #b91c1c);
+}

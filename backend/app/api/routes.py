@@ -365,6 +365,55 @@ def obter_licitacao(licitacao_id: int, db: Session = Depends(get_db)):
     return _licitacao_out(lic, db, incluir_raw=True)
 
 
+@router.delete("/licitacoes/{licitacao_id}")
+def excluir_licitacao(
+    licitacao_id: int,
+    usuario: Usuario = Depends(usuario_atual),
+    db: Session = Depends(get_db),
+):
+    """Exclui a licitação e tudo dela (card, análise, documentos) — IRREVERSÍVEL.
+
+    Grava uma lápide em licitacoes_excluidas para a coleta não trazer a mesma
+    licitação de volta no próximo ciclo. Eventos de auditoria são preservados
+    (licitacao_id vira NULL).
+    """
+    from sqlalchemy import update as sql_update
+
+    from ..models import EventoUso, LicitacaoExcluida
+
+    lic = db.get(Licitacao, licitacao_id)
+    if not lic:
+        raise HTTPException(404, "Licitação não encontrada")
+
+    descricao = f"{lic.orgao} — {(lic.objeto or '')[:150]}"
+    db.execute(
+        sql_update(EventoUso).where(EventoUso.licitacao_id == lic.id)
+        .values(licitacao_id=None)
+    )
+    for analise in db.execute(select(Analise).where(Analise.licitacao_id == lic.id)).scalars():
+        db.delete(analise)
+    for doc in db.execute(select(DocumentoAnexo).where(DocumentoAnexo.licitacao_id == lic.id)).scalars():
+        db.delete(doc)
+    if lic.oportunidade:
+        db.delete(lic.oportunidade)
+    ja_tem_lapide = db.execute(
+        select(LicitacaoExcluida).where(
+            LicitacaoExcluida.fonte == lic.fonte,
+            LicitacaoExcluida.id_externo == lic.id_externo,
+        )
+    ).scalar_one_or_none()
+    if not ja_tem_lapide:
+        db.add(LicitacaoExcluida(
+            fonte=lic.fonte, id_externo=lic.id_externo,
+            descricao=descricao, excluido_por=usuario.nome,
+        ))
+    db.delete(lic)
+    db.commit()
+
+    registrar_evento(db, usuario, "excluir_licitacao", detalhe=descricao[:300])
+    return {"ok": True, "excluida": descricao}
+
+
 class LicitacaoPatch(BaseModel):
     """Campos editáveis pelo time. Só o que vier no corpo é alterado.
 

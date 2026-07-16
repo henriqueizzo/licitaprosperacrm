@@ -36,6 +36,7 @@ export const api = {
   criarLicitacao: (dados) => req('/api/licitacoes', post(dados)),
   atualizarLicitacao: (id, patch) =>
     req(`/api/licitacoes/${id}`, { ...post(patch), method: 'PATCH' }),
+  excluirLicitacao: (id) => req(`/api/licitacoes/${id}`, { method: 'DELETE' }),
   extrairLicitacao: (texto, url) => req('/api/licitacoes/extrair', post({ texto, url })),
   extrairLicitacaoPdf: (arquivo) => {
     const fd = new FormData()

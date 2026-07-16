@@ -89,6 +89,25 @@ class Licitacao(Base):
     oportunidade: Mapped["Oportunidade | None"] = relationship(back_populates="licitacao", uselist=False)
 
 
+class LicitacaoExcluida(Base):
+    """Lápide de licitação excluída pelo time.
+
+    Sem ela, a coleta traria a licitação de volta no próximo ciclo (o PNCP
+    devolve tudo dentro do horizonte de 45 dias). A coleta consulta esta tabela
+    e pula o que o time excluiu de propósito.
+    """
+
+    __tablename__ = "licitacoes_excluidas"
+    __table_args__ = (UniqueConstraint("fonte", "id_externo", name="uq_excluida_fonte_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    fonte: Mapped[str] = mapped_column(String(30))
+    id_externo: Mapped[str] = mapped_column(String(120))
+    descricao: Mapped[str] = mapped_column(Text, default="")   # órgão + objeto p/ referência
+    excluido_por: Mapped[str] = mapped_column(Text, default="")  # nome do usuário
+    criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Analise(Base):
     """Resultado da análise do edital pela IA."""
 

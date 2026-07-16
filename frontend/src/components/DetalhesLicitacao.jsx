@@ -23,8 +23,9 @@ const CORES_CLASSIFICACAO = {
 
 const FONTES = { pncp: 'PNCP', fiesc: 'FIESC', fiergs: 'FIERGS', fiems: 'FIEMS', manual: 'Cadastro manual' }
 
-// aoMudar: callback do pai para recarregar a lista após editar/suspender/reanalisar
-export default function DetalhesLicitacao({ licitacao, aoMudar }) {
+// aoMudar: callback do pai para recarregar a lista após editar/suspender/reanalisar.
+// aoFechar: fecha o modal/linha após excluir (opcional).
+export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
   const [l, setL] = useState(licitacao)
   const [editando, setEditando] = useState(false)
   const [salvando, setSalvando] = useState(false)
@@ -90,6 +91,25 @@ export default function DetalhesLicitacao({ licitacao, aoMudar }) {
     }
   }
 
+  async function excluir() {
+    const nome = [l.orgao, l.municipio && `${l.municipio}/${l.uf}`].filter(Boolean).join(' — ')
+    if (!window.confirm(
+      `Excluir DEFINITIVAMENTE a licitação?\n\n${nome}\n\n` +
+      'O card, a análise da IA e os documentos anexados serão apagados, ' +
+      'e a coleta automática não vai trazê-la de volta. Essa ação não tem desfazer.'
+    )) return
+    setSalvando(true)
+    setMsg('')
+    try {
+      await api.excluirLicitacao(l.id)
+      aoMudar?.()
+      aoFechar?.()
+    } catch (e) {
+      setMsg(`Erro ao excluir: ${e.message}`)
+      setSalvando(false)
+    }
+  }
+
   const ocupado = salvando || reanalisando
   return (
     <div className="detalhes-lic">
@@ -122,6 +142,10 @@ export default function DetalhesLicitacao({ licitacao, aoMudar }) {
         <button type="button" disabled={ocupado} onClick={reanalisar}
           title="Refazer a análise IA (use após o edital mudar)">
           {reanalisando ? '⏳ Reanalisando…' : '🔁 Reanalisar'}
+        </button>
+        <button type="button" className="btn-excluir" disabled={ocupado} onClick={excluir}
+          title="Exclui a licitação, o card, a análise e os documentos — sem desfazer">
+          🗑 Excluir
         </button>
       </div>
       {msg && <div className="form-msg">{msg}</div>}
