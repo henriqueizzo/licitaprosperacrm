@@ -32,6 +32,7 @@ export default function CadastroManual() {
   const [form, setForm] = useState(FORM_VAZIO)
   const [resumo, setResumo] = useState('')
   const [linkAuto, setLinkAuto] = useState('')
+  const [pdfAuto, setPdfAuto] = useState(null)
   const [extraindo, setExtraindo] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [msg, setMsg] = useState('')
@@ -39,14 +40,20 @@ export default function CadastroManual() {
   const set = (campo) => (e) => setForm({ ...form, [campo]: e.target.value })
 
   async function preencherAutomatico() {
-    if (!resumo.trim() && !linkAuto.trim()) {
-      setMsg('⚠ Cole o resumo da licitação ou informe o link para preencher automaticamente.')
+    if (!pdfAuto && !resumo.trim() && !linkAuto.trim()) {
+      setMsg('⚠ Anexe o PDF do edital, cole o resumo ou informe o link para preencher automaticamente.')
       return
     }
     setExtraindo(true)
-    setMsg('🔎 Lendo o conteúdo e preenchendo os campos… isso leva alguns segundos.')
+    setMsg(
+      pdfAuto
+        ? '🔎 Lendo o PDF do edital e preenchendo os campos… PDFs grandes podem levar 1 a 2 minutos.'
+        : '🔎 Lendo o conteúdo e preenchendo os campos… isso leva alguns segundos.'
+    )
     try {
-      const c = await api.extrairLicitacao(resumo, linkAuto)
+      const c = pdfAuto
+        ? await api.extrairLicitacaoPdf(pdfAuto)
+        : await api.extrairLicitacao(resumo, linkAuto)
       setForm((f) => ({
         ...f,
         objeto: c.objeto || f.objeto,
@@ -93,6 +100,7 @@ export default function CadastroManual() {
       setForm(FORM_VAZIO)
       setResumo('')
       setLinkAuto('')
+      setPdfAuto(null)
     } catch (e) {
       setMsg(
         e.message.includes('409')
@@ -122,6 +130,21 @@ export default function CadastroManual() {
           <input type="url" value={linkAuto} onChange={(e) => setLinkAuto(e.target.value)}
             placeholder="https://…" />
         </label>
+        <label>
+          Ou anexe o PDF do edital (até 19 MB) — tem prioridade sobre o resumo/link
+          <input
+            type="file"
+            accept="application/pdf,.pdf"
+            onChange={(e) => setPdfAuto(e.target.files?.[0] || null)}
+          />
+        </label>
+        {pdfAuto && (
+          <p className="auto-dica">
+            📎 {pdfAuto.name} ({(pdfAuto.size / 1024 / 1024).toFixed(1)} MB){' '}
+            <button type="button" className="doc-excluir" title="Remover PDF"
+              onClick={() => setPdfAuto(null)}>×</button>
+          </p>
+        )}
         <button className="primario" onClick={preencherAutomatico} disabled={extraindo || salvando}>
           {extraindo ? '⏳ Preenchendo…' : '✨ Preencher automaticamente'}
         </button>

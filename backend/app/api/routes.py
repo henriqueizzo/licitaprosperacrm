@@ -278,6 +278,41 @@ def extrair_campos_licitacao(
     return out
 
 
+MAX_PDF_EXTRACAO = 19 * 1024 * 1024  # limite inline do Gemini
+
+
+@router.post("/licitacoes/extrair-arquivo")
+async def extrair_campos_de_pdf(
+    arquivo: UploadFile,
+    usuario: Usuario = Depends(usuario_atual),
+    db: Session = Depends(get_db),
+):
+    """Extrai os campos do cadastro a partir de um PDF do edital anexado pelo usuário.
+
+    Mesmo fluxo do /licitacoes/extrair, mas com o arquivo enviado direto (multipart)
+    em vez de link — útil quando o edital só existe como arquivo local.
+    """
+    from ..analyzer import ErroCotaIA, criar_analisador
+
+    conteudo = await arquivo.read()
+    if not conteudo.startswith(b"%PDF"):
+        raise HTTPException(400, "Envie um arquivo PDF (o edital em .pdf).")
+    if len(conteudo) > MAX_PDF_EXTRACAO:
+        raise HTTPException(413, "PDF excede o tamanho máximo de 19 MB para leitura pela IA.")
+
+    try:
+        campos = criar_analisador().extrair(pdf_bytes=conteudo)
+    except ErroCotaIA as exc:
+        raise HTTPException(503, f"IA indisponível no momento: {exc}")
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+
+    registrar_evento(db, usuario, "extracao_cadastro", detalhe=f"pdf: {arquivo.filename or ''}"[:300])
+    out = campos.model_dump()
+    out["link"] = ""
+    return out
+
+
 def _baixar_conteudo(url: str) -> tuple[str | None, bytes | None]:
     """Baixa o link do usuário. Retorna (texto_da_pagina, pdf_bytes) — um dos dois."""
     import httpx
@@ -514,6 +549,52 @@ def atualizar_oportunidade(
     return _oportunidade_out(op, db)
 
 
+# ---------- Declarações em Word ----------
+
+class DeclaracaoIn(BaseModel):
+    documento: str            # texto do item do checklist (a declaração exigida)
+    referencia: str = ""      # referência no edital (item/cláusula), se houver
+
+
+@router.post("/licitacoes/{licitacao_id}/declaracoes")
+def gerar_declaracao(
+    licitacao_id: int,
+    dados: DeclaracaoIn,
+    usuario: Usuario = Depends(usuario_atual),
+    db: Session = Depends(get_db),
+):
+    """Gera a declaração exigida pelo edital em Word (.docx), pronta para assinar.
+
+    O texto é redigido pela IA do provedor ativo (fallback: modelo genérico) e o
+    documento sai com a identidade Prospera + bloco de assinatura do representante
+    legal cadastrado na aba Perfil. O header X-Texto-Origem indica 'ia' ou 'modelo'.
+    """
+    from ..services import declaracoes
+
+    lic = db.get(Licitacao, licitacao_id)
+    if not lic:
+        raise HTTPException(404, "Licitação não encontrada")
+    documento = dados.documento.strip()
+    if not documento:
+        raise HTTPException(400, "Informe qual declaração deve ser gerada")
+
+    perfil = pipeline.obter_perfil(db)
+    texto, origem = declaracoes.redigir_texto(lic, perfil, documento, dados.referencia.strip())
+    docx_bytes = declaracoes.gerar_docx(lic, perfil, documento, dados.referencia.strip(), texto)
+
+    registrar_evento(db, usuario, "gerar_declaracao", licitacao_id=lic.id, detalhe=documento[:200])
+
+    arquivo = declaracoes.nome_arquivo(lic, documento)
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{quote(arquivo)}",
+            "X-Texto-Origem": origem,
+        },
+    )
+
+
 # ---------- Perfil da empresa ----------
 
 class PerfilIn(BaseModel):
@@ -524,6 +605,13 @@ class PerfilIn(BaseModel):
     valor_maximo: float | None = None
     palavras_chave: list[str] = []
     restricoes: list[str] = []
+    # Dados oficiais para as declarações geradas em Word
+    razao_social: str = ""
+    cnpj: str = ""
+    endereco: str = ""
+    cidade_sede: str = ""
+    representante_nome: str = ""
+    representante_cargo: str = ""
 
 
 @router.get("/perfil")

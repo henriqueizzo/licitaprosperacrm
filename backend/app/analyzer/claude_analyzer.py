@@ -102,6 +102,23 @@ class AnalisadorEdital:
             raise ErroCotaIA("Rate limit da API Anthropic persistente.") from exc
         return response.parsed_output
 
+    def redigir(self, instrucao: str, system: str) -> str:
+        """Gera texto corrido (sem schema) — usado p/ redigir declarações e afins."""
+        try:
+            response = self.client.messages.create(
+                model=settings.claude_model,
+                max_tokens=4000,
+                system=system,
+                messages=[{"role": "user", "content": instrucao}],
+            )
+        except anthropic.BadRequestError as exc:
+            if "credit balance" in str(exc.message).lower():
+                raise ErroCotaIA("Créditos da API Anthropic esgotados.") from exc
+            raise
+        except anthropic.RateLimitError as exc:
+            raise ErroCotaIA("Rate limit da API Anthropic persistente.") from exc
+        return "".join(b.text for b in response.content if b.type == "text").strip()
+
     def _chamar(self, content: list[dict]):
         return self.client.messages.parse(
             model=settings.claude_model,

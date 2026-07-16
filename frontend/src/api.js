@@ -35,6 +35,35 @@ export const api = {
   licitacoes: (params = '') => req(`/api/licitacoes${params}`),
   criarLicitacao: (dados) => req('/api/licitacoes', post(dados)),
   extrairLicitacao: (texto, url) => req('/api/licitacoes/extrair', post({ texto, url })),
+  extrairLicitacaoPdf: (arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    return req('/api/licitacoes/extrair-arquivo', { method: 'POST', body: fd })
+  },
+  // Gera a declaração em Word e devolve { blob, nome, origem } ('ia' | 'modelo')
+  gerarDeclaracao: async (licitacaoId, documento, referencia = '') => {
+    const r = await fetch(`/api/licitacoes/${licitacaoId}/declaracoes`, {
+      credentials: 'same-origin',
+      ...post({ documento, referencia }),
+    })
+    if (r.status === 401) {
+      if (ao401) ao401()
+      throw new Error('Sessão expirada — entre novamente')
+    }
+    if (!r.ok) {
+      let msg = `Erro ${r.status}`
+      try {
+        const dados = await r.json()
+        if (typeof dados.detail === 'string') msg = dados.detail
+      } catch { /* corpo não-JSON */ }
+      throw new Error(msg)
+    }
+    const nome = decodeURIComponent(
+      (r.headers.get('Content-Disposition') || '').match(/filename\*=UTF-8''([^;]+)/)?.[1] ||
+      'declaracao.docx'
+    )
+    return { blob: await r.blob(), nome, origem: r.headers.get('X-Texto-Origem') || '' }
+  },
   oportunidades: () => req('/api/oportunidades'),
   moverOportunidade: (id, estagio) =>
     req(`/api/oportunidades/${id}`, { ...post({ estagio }), method: 'PATCH' }),

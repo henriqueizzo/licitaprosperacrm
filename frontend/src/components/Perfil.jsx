@@ -11,6 +11,7 @@ export default function Perfil() {
 
   const setLista = (campo) => (e) =>
     setPerfil({ ...perfil, [campo]: e.target.value.split('\n').map((s) => s.trim()).filter(Boolean) })
+  const setTexto = (campo) => (e) => setPerfil({ ...perfil, [campo]: e.target.value })
 
   async function salvar() {
     try {
@@ -51,6 +52,43 @@ export default function Perfil() {
           Valor máximo (R$)
           <input type="number" value={perfil.valor_maximo ?? ''}
             onChange={(e) => setPerfil({ ...perfil, valor_maximo: e.target.value ? Number(e.target.value) : null })} />
+        </label>
+      </div>
+      <h3 className="perfil-secao">Dados para documentos oficiais</h3>
+      <p className="auto-dica">
+        Usados nas declarações geradas em Word (botão "Gerar Word" na Documentação):
+        cabeçalho da empresa e bloco de assinatura do representante legal.
+      </p>
+      <div className="grade">
+        <label>
+          Razão social
+          <input value={perfil.razao_social || ''} onChange={setTexto('razao_social')}
+            placeholder="Ex.: PROSPERA BENEFÍCIOS S.A." />
+        </label>
+        <label>
+          CNPJ
+          <input value={perfil.cnpj || ''} onChange={setTexto('cnpj')}
+            placeholder="Ex.: 00.000.000/0001-00" />
+        </label>
+        <label>
+          Endereço da sede
+          <input value={perfil.endereco || ''} onChange={setTexto('endereco')}
+            placeholder="Ex.: Rua Exemplo, 123, Centro, Porto Alegre/RS, CEP 90000-000" />
+        </label>
+        <label>
+          Cidade/UF (linha de local e data)
+          <input value={perfil.cidade_sede || ''} onChange={setTexto('cidade_sede')}
+            placeholder="Ex.: Porto Alegre/RS" />
+        </label>
+        <label>
+          Representante legal (nome completo)
+          <input value={perfil.representante_nome || ''} onChange={setTexto('representante_nome')}
+            placeholder="Ex.: Dario ..." />
+        </label>
+        <label>
+          Cargo do representante
+          <input value={perfil.representante_cargo || ''} onChange={setTexto('representante_cargo')}
+            placeholder="Ex.: CEO — Prospera Benefícios" />
         </label>
       </div>
       <button className="primario" onClick={salvar}>Salvar perfil</button>

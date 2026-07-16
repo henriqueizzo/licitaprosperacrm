@@ -45,6 +45,16 @@ def _migracoes(dialeto: str) -> dict[str, dict[str, str]]:
         "usuarios": {
             "ultimo_acesso": "TIMESTAMP",
         },
+        # Dados oficiais da empresa para as declarações geradas em Word.
+        # Defaults do representante já preenchidos p/ bancos existentes (produção).
+        "perfil_empresa": {
+            "razao_social": "TEXT NOT NULL DEFAULT ''",
+            "cnpj": "TEXT NOT NULL DEFAULT ''",
+            "endereco": "TEXT NOT NULL DEFAULT ''",
+            "cidade_sede": "TEXT NOT NULL DEFAULT ''",
+            "representante_nome": "TEXT NOT NULL DEFAULT 'Dario'",
+            "representante_cargo": "TEXT NOT NULL DEFAULT 'CEO — Prospera Benefícios'",
+        },
     }
 
 

@@ -10,3 +10,4 @@ apscheduler>=3.10
 bcrypt>=4.1
 psycopg2-binary>=2.9
 google-genai>=1.16
+python-docx>=1.1

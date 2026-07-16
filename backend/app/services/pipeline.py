@@ -33,6 +33,13 @@ def perfil_como_dict(perfil: PerfilEmpresa) -> dict:
         "valor_maximo": perfil.valor_maximo,
         "palavras_chave": perfil.palavras_chave or [],
         "restricoes": perfil.restricoes or [],
+        # Dados oficiais usados nas declarações geradas em Word
+        "razao_social": perfil.razao_social or "",
+        "cnpj": perfil.cnpj or "",
+        "endereco": perfil.endereco or "",
+        "cidade_sede": perfil.cidade_sede or "",
+        "representante_nome": perfil.representante_nome or "",
+        "representante_cargo": perfil.representante_cargo or "",
     }
 
 

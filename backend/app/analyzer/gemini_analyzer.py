@@ -81,6 +81,11 @@ class AnalisadorEditalGemini:
             campos = CamposLicitacao.model_validate_json(response.text)
         return campos
 
+    def redigir(self, instrucao: str, system: str) -> str:
+        """Gera texto corrido (sem schema) — usado p/ redigir declarações e afins."""
+        response = self._gerar_com_retry([instrucao], system=system, schema=None, max_tokens=4000)
+        return (response.text or "").strip()
+
     def _gerar_com_retry(self, contents: list, system: str = SYSTEM_ANALISTA,
                          schema=ResultadoAnalise, max_tokens: int = 16000):
         modelos = [settings.gemini_model] + [m for m in MODELOS_FALLBACK if m != settings.gemini_model]
@@ -120,13 +125,16 @@ class AnalisadorEditalGemini:
         raise ultima_5xx  # todos os modelos indisponíveis (transitório — próximo ciclo resolve)
 
     def _gerar(self, modelo: str, contents: list, system: str, schema, max_tokens: int):
+        # schema=None: saída em texto corrido (redigir); com schema: JSON validado
+        config = genai_types.GenerateContentConfig(
+            system_instruction=system,
+            max_output_tokens=max_tokens,
+        )
+        if schema is not None:
+            config.response_mime_type = "application/json"
+            config.response_schema = schema
         return self.client.models.generate_content(
             model=modelo,
             contents=contents,
-            config=genai_types.GenerateContentConfig(
-                system_instruction=system,
-                response_mime_type="application/json",
-                response_schema=schema,
-                max_output_tokens=max_tokens,
-            ),
+            config=config,
         )

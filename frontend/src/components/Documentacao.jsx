@@ -46,6 +46,10 @@ function BotaoAnexar({ rotulo, aoEscolher, desabilitado }) {
   )
 }
 
+// Item do checklist que é uma declaração (a IA gera o Word pronto para assinar)
+const ehDeclaracao = (item) =>
+  /declara/i.test(item.documento) || /DECLARA/i.test(item.categoria)
+
 export default function Documentacao({ licitacao, aoFechar }) {
   const [dados, setDados] = useState(null)
   const [erro, setErro] = useState('')
@@ -53,6 +57,7 @@ export default function Documentacao({ licitacao, aoFechar }) {
   const [enviando, setEnviando] = useState(false)
   const [reanalisando, setReanalisando] = useState(false)
   const [itemAvulso, setItemAvulso] = useState('')
+  const [gerandoWord, setGerandoWord] = useState('')
 
   const carregar = () =>
     api.documentos(licitacao.id).then(setDados).catch((e) => setErro(e.message))
@@ -88,6 +93,31 @@ export default function Documentacao({ licitacao, aoFechar }) {
       setMsg(`Falha ao reanalisar: ${e.message}`)
     } finally {
       setReanalisando(false)
+    }
+  }
+
+  async function gerarWord(item) {
+    setGerandoWord(item.documento)
+    setMsg('')
+    try {
+      const { blob, nome, origem } = await api.gerarDeclaracao(
+        licitacao.id, item.documento, item.referencia_edital
+      )
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = nome
+      a.click()
+      URL.revokeObjectURL(url)
+      setMsg(
+        origem === 'modelo'
+          ? '📄 Declaração gerada com o modelo padrão (IA indisponível agora) — revise o texto antes de usar.'
+          : '📄 Declaração gerada — revise o texto e os dados antes de assinar.'
+      )
+    } catch (e) {
+      setMsg(`Falha ao gerar a declaração: ${e.message}`)
+    } finally {
+      setGerandoWord('')
     }
   }
 
@@ -165,6 +195,17 @@ export default function Documentacao({ licitacao, aoFechar }) {
                   </div>
                 )}
               </div>
+              {ehDeclaracao(item) && (
+                <button
+                  type="button"
+                  className="btn-anexar btn-word"
+                  disabled={gerandoWord !== ''}
+                  title="A IA redige a declaração e gera o Word com a identidade Prospera, pronto para o CEO assinar"
+                  onClick={() => gerarWord(item)}
+                >
+                  {gerandoWord === item.documento ? '⏳ Gerando…' : '📄 Gerar Word'}
+                </button>
+              )}
               <BotaoAnexar
                 rotulo={enviando ? '…' : item.anexos.length ? '+ Anexar outro' : '+ Anexar'}
                 desabilitado={enviando}

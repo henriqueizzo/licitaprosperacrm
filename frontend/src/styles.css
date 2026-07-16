@@ -1219,3 +1219,13 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
     -webkit-print-color-adjust: exact;
   }
 }
+
+/* ---------- Declarações em Word + seção extra do Perfil ---------- */
+.btn-word {
+  color: var(--azul-texto, #1d4ed8);
+  border-color: #bfdbfe;
+  background: var(--azul-suave, #eff6ff);
+  white-space: nowrap;
+}
+.btn-word:disabled { opacity: 0.55; cursor: wait; }
+.perfil-secao { margin: 22px 0 4px; font-size: 0.95rem; }

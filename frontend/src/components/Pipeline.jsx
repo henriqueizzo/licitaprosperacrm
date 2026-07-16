@@ -68,6 +68,8 @@ export default function Pipeline() {
   const [docsLic, setDocsLic] = useState(null) // licitação com modal de documentação aberto
   const [busca, setBusca] = useState('')
   const [ufFiltro, setUfFiltro] = useState('todas')
+  const [classFiltro, setClassFiltro] = useState('todas')
+  const [vencFiltro, setVencFiltro] = useState('qualquer')
 
   const carregar = () => api.oportunidades().then(setOps).catch((e) => setErro(e.message))
   useEffect(() => {
@@ -80,14 +82,28 @@ export default function Pipeline() {
   const perdidas = ops.filter((o) => o.estagio === 'perdeu_nogo')
   const valorEmDisputa = abertas.reduce((soma, o) => soma + (o.licitacao?.valor_estimado || 0), 0)
 
-  // Busca client-side (dados já carregados): texto sem acento + filtro rápido de UF
+  // Busca client-side (dados já carregados): texto sem acento + filtros rápidos
+  // de UF, classificação da IA e proximidade do vencimento
   const termo = normalizar(busca.trim())
-  const filtroAtivo = termo !== '' || ufFiltro !== 'todas'
+  const filtroAtivo =
+    termo !== '' || ufFiltro !== 'todas' || classFiltro !== 'todas' || vencFiltro !== 'qualquer'
+  const passaVencimento = (o) => {
+    if (vencFiltro === 'qualquer') return true
+    const dias = diasParaVencer(o.licitacao?.data_encerramento)
+    if (dias == null) return false
+    if (vencFiltro === 'vencidas') return dias < 0
+    return dias >= 0 && dias <= Number(vencFiltro)
+  }
   const opsVisiveis = !filtroAtivo
     ? ops
     : ops.filter((o) => {
         const lic = o.licitacao
         if (ufFiltro !== 'todas' && lic?.uf !== ufFiltro) return false
+        if (classFiltro !== 'todas') {
+          const cls = lic?.analise?.classificacao_final || ''
+          if (classFiltro === 'sem_analise' ? cls !== '' : cls !== classFiltro) return false
+        }
+        if (!passaVencimento(o)) return false
         if (!termo) return true
         return contemTermo(termo, [
           lic?.objeto,
@@ -166,6 +182,30 @@ export default function Pipeline() {
         <option value="RS">RS</option>
         <option value="SC">SC</option>
         <option value="PR">PR</option>
+      </select>
+      <select
+        className="filtro-uf"
+        value={classFiltro}
+        onChange={(e) => setClassFiltro(e.target.value)}
+        aria-label="Filtrar por classificação da IA"
+      >
+        <option value="todas">Todas as classificações</option>
+        {Object.entries(CLASSIFICACAO_VISUAL).map(([valor, v]) => (
+          <option key={valor} value={valor}>{v.rotulo}</option>
+        ))}
+        <option value="sem_analise">Sem análise</option>
+      </select>
+      <select
+        className="filtro-uf"
+        value={vencFiltro}
+        onChange={(e) => setVencFiltro(e.target.value)}
+        aria-label="Filtrar por vencimento"
+      >
+        <option value="qualquer">Qualquer vencimento</option>
+        <option value="7">Vence em até 7 dias</option>
+        <option value="14">Vence em até 14 dias</option>
+        <option value="30">Vence em até 30 dias</option>
+        <option value="vencidas">Vencidas</option>
       </select>
       {filtroAtivo && (
         <span className="busca-contagem">

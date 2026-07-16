@@ -196,6 +196,13 @@ class PerfilEmpresa(Base):
     valor_maximo: Mapped[float | None] = mapped_column(Float, nullable=True)
     palavras_chave: Mapped[list | None] = mapped_column(JSON, nullable=True)
     restricoes: Mapped[list | None] = mapped_column(JSON, nullable=True)
+    # Dados oficiais para documentos gerados pelo CRM (declarações em Word)
+    razao_social: Mapped[str] = mapped_column(Text, default="")
+    cnpj: Mapped[str] = mapped_column(Text, default="")
+    endereco: Mapped[str] = mapped_column(Text, default="")
+    cidade_sede: Mapped[str] = mapped_column(Text, default="")   # "Cidade/UF" (linha de data)
+    representante_nome: Mapped[str] = mapped_column(Text, default="")
+    representante_cargo: Mapped[str] = mapped_column(Text, default="")
 
 
 PERFIL_PADRAO = {
@@ -217,4 +224,10 @@ PERFIL_PADRAO = {
         "benefícios corporativos", "ticket alimentação", "ticket refeição",
     ],
     "restricoes": [],
+    "razao_social": "",
+    "cnpj": "",
+    "endereco": "",
+    "cidade_sede": "",
+    "representante_nome": "Dario",
+    "representante_cargo": "CEO — Prospera Benefícios",
 }
