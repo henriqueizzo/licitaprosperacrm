@@ -10,6 +10,7 @@ from ..collectors import coletores_ativos
 from ..collectors.pncp import PNCPCollector
 from ..config import settings
 from ..models import PERFIL_PADRAO, Analise, ExecucaoPipeline, Licitacao, Oportunidade, PerfilEmpresa
+from .dedupe import eh_espelho_de_existente
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ def executar_coleta(db: Session, dias: int = 3) -> dict:
     ufs = perfil.ufs or ["RS", "SC", "PR"]
     palavras = perfil.palavras_chave or []
     novas = 0
+    espelhos_ignorados = 0
     avisos: list[str] = []
     if not palavras:
         # Sem palavras-chave o PNCP filtra TUDO (nenhum objeto "bate") e a coleta
@@ -71,6 +73,14 @@ def executar_coleta(db: Session, dias: int = 3) -> dict:
             ).scalar_one_or_none()
             if existe:
                 continue
+            # Mesmo pregão publicado por outra plataforma (numeroControlePNCP
+            # diferente): não insere o espelho — ver services/dedupe.py.
+            gemea = eh_espelho_de_existente(db, c)
+            if gemea is not None:
+                espelhos_ignorados += 1
+                logger.info("Espelho ignorado na coleta: %s %s é espelho da licitação #%s",
+                            c.fonte, c.id_externo, gemea.id)
+                continue
             lic = Licitacao(
                 fonte=c.fonte, id_externo=c.id_externo, orgao=c.orgao, municipio=c.municipio,
                 uf=c.uf, modalidade=c.modalidade, objeto=c.objeto, valor_estimado=c.valor_estimado,
@@ -84,6 +94,8 @@ def executar_coleta(db: Session, dias: int = 3) -> dict:
             novas += 1
     db.commit()
     resultado = {"novas_licitacoes": novas}
+    if espelhos_ignorados:
+        resultado["espelhos_ignorados"] = espelhos_ignorados
     if avisos:
         resultado["avisos"] = avisos
     return resultado

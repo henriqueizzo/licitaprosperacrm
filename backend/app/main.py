@@ -57,6 +57,12 @@ async def lifespan(app: FastAPI):
             logger.info("Reenfileiradas %d licitações com análise em 'erro'", requeue.rowcount)
         if manuais.rowcount:
             logger.info("Normalizadas %d licitações manuais para status 'manual'", manuais.rowcount)
+        # Apaga licitações espelhadas (mesmo pregão via plataformas diferentes).
+        # Idempotente; grupos ambíguos (mais de uma trabalhada) viram warning no log.
+        from .services.dedupe import apagar_espelhos
+        dedupe = apagar_espelhos(db)
+        if dedupe["apagadas"]:
+            logger.info("Dedupe no startup: %d espelho(s) apagado(s)", dedupe["apagadas"])
     finally:
         db.close()
     scheduler = None
