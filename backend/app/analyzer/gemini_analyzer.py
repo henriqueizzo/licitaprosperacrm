@@ -82,12 +82,24 @@ class AnalisadorEditalGemini:
         return campos
 
     def redigir(self, instrucao: str, system: str) -> str:
-        """Gera texto corrido (sem schema) — usado p/ redigir declarações e afins."""
-        response = self._gerar_com_retry([instrucao], system=system, schema=None, max_tokens=4000)
+        """Gera texto corrido (sem schema) — usado p/ redigir declarações e afins.
+
+        Chamada interativa (botão na tela) atrás do proxy do Render, que corta
+        requests em ~100s: retries curtos — se o Gemini estiver congestionado,
+        quem chama usa o fallback determinístico em vez de estourar o proxy.
+        """
+        response = self._gerar_com_retry(
+            [instrucao], system=system, schema=None, max_tokens=4000,
+            esperas_429=[8], esperas_5xx=[8],
+        )
         return (response.text or "").strip()
 
     def _gerar_com_retry(self, contents: list, system: str = SYSTEM_ANALISTA,
-                         schema=ResultadoAnalise, max_tokens: int = 16000):
+                         schema=ResultadoAnalise, max_tokens: int = 16000,
+                         esperas_429: list[int] | None = None,
+                         esperas_5xx: list[int] | None = None):
+        esperas_429 = ESPERAS_RATE_LIMIT if esperas_429 is None else esperas_429
+        esperas_5xx = ESPERAS_5XX if esperas_5xx is None else esperas_5xx
         modelos = [settings.gemini_model] + [m for m in MODELOS_FALLBACK if m != settings.gemini_model]
         ultima_5xx: Exception | None = None
         for modelo in modelos:
@@ -98,8 +110,8 @@ class AnalisadorEditalGemini:
                     return self._gerar(modelo, contents, system, schema, max_tokens)
                 except genai_errors.APIError as exc:
                     if exc.code == 429:
-                        if rate_limits < len(ESPERAS_RATE_LIMIT):
-                            espera = ESPERAS_RATE_LIMIT[rate_limits]
+                        if rate_limits < len(esperas_429):
+                            espera = esperas_429[rate_limits]
                             rate_limits += 1
                             logger.warning("Gemini rate limit (429), aguardando %ds", espera)
                             time.sleep(espera)
@@ -111,8 +123,8 @@ class AnalisadorEditalGemini:
                     if exc.code in (401, 403):
                         raise ErroCotaIA(f"Chave do Gemini inválida ou sem permissão ({exc.code}).") from exc
                     if exc.code and exc.code >= 500:
-                        if tentativas_5xx < len(ESPERAS_5XX):
-                            espera = ESPERAS_5XX[tentativas_5xx]
+                        if tentativas_5xx < len(esperas_5xx):
+                            espera = esperas_5xx[tentativas_5xx]
                             tentativas_5xx += 1
                             logger.warning("Gemini %s indisponível (%s), aguardando %ds",
                                            modelo, exc.code, espera)
