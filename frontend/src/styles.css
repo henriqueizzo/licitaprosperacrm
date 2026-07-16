@@ -1229,3 +1229,24 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 }
 .btn-word:disabled { opacity: 0.55; cursor: wait; }
 .perfil-secao { margin: 22px 0 4px; font-size: 0.95rem; }
+
+/* ---------- Detalhes da licitação (modal do kanban + linha expandida) ---------- */
+.cartao.clicavel { cursor: pointer; }
+.modal .modal-fechar { float: right; margin: 0 0 8px 12px; }
+.detalhes-lic { font-size: 0.85rem; line-height: 1.55; }
+.detalhes-lic p { margin: 7px 0; }
+.detalhes-cabecalho {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 12px; margin-bottom: 10px; flex-wrap: wrap;
+}
+.detalhes-cabecalho strong { display: block; font-size: 1rem; }
+.detalhes-cabecalho small { color: var(--texto-mudo); }
+.detalhes-meta {
+  display: flex; flex-wrap: wrap; gap: 8px 22px; padding: 10px 12px;
+  background: var(--panel-2, #f8fafc); border: 1px solid var(--linha, #e2e8f0);
+  border-radius: var(--raio-sm, 12px); margin-bottom: 10px;
+}
+.detalhes-meta > span { display: flex; flex-direction: column; }
+.detalhes-meta small { color: var(--texto-mudo); font-size: 0.7rem; }
+.detalhes-lic details { margin-top: 8px; }
+.detalhes-lic pre { font-size: 0.78rem; }

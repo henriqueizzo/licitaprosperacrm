@@ -2,6 +2,8 @@ import { Fragment, useEffect, useState } from 'react'
 import { api } from '../api.js'
 import Documentacao from './Documentacao.jsx'
 import CampoBusca, { normalizar, contemTermo } from './CampoBusca.jsx'
+import DetalhesLicitacao from './DetalhesLicitacao.jsx'
+import FiltrosSelects, { passaClassificacao, passaVencimento } from './Filtros.jsx'
 
 const brl = (v) =>
   v == null ? '—' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -41,6 +43,9 @@ export default function Licitacoes() {
   const [msg, setMsg] = useState('')
   const [reanalisando, setReanalisando] = useState(null) // id da licitação em reanálise
   const [busca, setBusca] = useState('')
+  const [ufFiltro, setUfFiltro] = useState('todas')
+  const [classFiltro, setClassFiltro] = useState('todas')
+  const [vencFiltro, setVencFiltro] = useState('qualquer')
 
   const carregar = () => api.licitacoes().then(setItens).catch((e) => setErro(e.message))
   useEffect(() => { carregar() }, [])
@@ -59,12 +64,18 @@ export default function Licitacoes() {
     }
   }
 
-  // Busca client-side, sem acento — mesmos campos do kanban
+  // Busca + filtros client-side, sem acento — mesmos filtros do kanban
   const termo = normalizar(busca.trim())
-  const visiveis = !termo
+  const filtroAtivo =
+    termo !== '' || ufFiltro !== 'todas' || classFiltro !== 'todas' || vencFiltro !== 'qualquer'
+  const visiveis = !filtroAtivo
     ? itens
-    : itens.filter((l) =>
-        contemTermo(termo, [
+    : itens.filter((l) => {
+        if (ufFiltro !== 'todas' && l.uf !== ufFiltro) return false
+        if (!passaClassificacao(l.analise, classFiltro)) return false
+        if (!passaVencimento(l.data_encerramento, vencFiltro)) return false
+        if (!termo) return true
+        return contemTermo(termo, [
           l.objeto,
           l.analise?.objeto_resumido,
           l.orgao,
@@ -72,7 +83,7 @@ export default function Licitacoes() {
           l.uf,
           l.id_externo,
         ])
-      )
+      })
 
   if (erro) return <p className="erro">Backend indisponível: {erro}</p>
   if (!itens.length) return <p>Nenhuma licitação coletada ainda. Clique em “Buscar e analisar agora”.</p>
@@ -86,13 +97,18 @@ export default function Licitacoes() {
         aoMudar={setBusca}
         placeholder="Buscar por órgão, objeto, município, UF ou pregão…"
       />
-      {termo && (
+      <FiltrosSelects
+        uf={ufFiltro} setUf={setUfFiltro}
+        cls={classFiltro} setCls={setClassFiltro}
+        venc={vencFiltro} setVenc={setVencFiltro}
+      />
+      {filtroAtivo && (
         <span className="busca-contagem">
           {visiveis.length} de {itens.length} licitações
         </span>
       )}
     </div>
-    {!visiveis.length && <p>Nenhuma licitação corresponde à busca.</p>}
+    {!visiveis.length && <p>Nenhuma licitação corresponde à busca/filtros.</p>}
     {visiveis.length > 0 && (
     <table className="tabela">
       <thead>
@@ -153,43 +169,10 @@ export default function Licitacoes() {
                 </td>
               </tr>
             )}
-            {aberta === l.id && l.analise && (
+            {aberta === l.id && (
               <tr className="detalhe">
                 <td colSpan={8}>
-                  <p><strong>Resumo:</strong> {l.analise.objeto_resumido}</p>
-                  {l.analise.classificacao_final && (
-                    <p>
-                      <strong>Scores:</strong> Prospera Benefícios {l.analise.score_beneficios}/10 •{' '}
-                      Prospera Pagamentos {l.analise.score_pagamentos}/10 •{' '}
-                      <strong>Classificação:</strong> {l.analise.classificacao_final}
-                    </p>
-                  )}
-                  {l.analise.credenciamento_analise && (
-                    <p><strong>Credenciamento:</strong> {l.analise.credenciamento_analise}</p>
-                  )}
-                  {l.analise.custo_emissao_cartoes && (
-                    <p><strong>Custo estimado de emissão:</strong> {l.analise.custo_emissao_cartoes}</p>
-                  )}
-                  {l.analise.alertas_impugnacao?.length > 0 && (
-                    <p><strong>Alertas de impugnação:</strong> {l.analise.alertas_impugnacao.join(' • ')}</p>
-                  )}
-                  <p><strong>Justificativa:</strong> {l.analise.justificativa}</p>
-                  {l.analise.prazos?.length > 0 && (
-                    <p><strong>Prazos:</strong> {l.analise.prazos.map((p) => `${p.descricao}: ${p.data_ou_prazo}`).join(' • ')}</p>
-                  )}
-                  {l.analise.atestados_exigidos?.length > 0 && (
-                    <p><strong>Atestados:</strong> {l.analise.atestados_exigidos.join(' • ')}</p>
-                  )}
-                  {l.analise.riscos?.length > 0 && (
-                    <p><strong>⚠ Riscos:</strong> {l.analise.riscos.join(' • ')}</p>
-                  )}
-                  {l.analise.analise_completa && (
-                    <details>
-                      <summary><strong>Análise completa (tabelas e seções)</strong></summary>
-                      <pre style={{ whiteSpace: 'pre-wrap', overflowX: 'auto' }}>{l.analise.analise_completa}</pre>
-                    </details>
-                  )}
-                  {l.link && <a href={l.link} target="_blank" rel="noreferrer">Abrir no portal ↗</a>}
+                  <DetalhesLicitacao licitacao={l} />
                 </td>
               </tr>
             )}

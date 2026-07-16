@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { api } from '../api.js'
 import Documentacao from './Documentacao.jsx'
 import CampoBusca, { normalizar, contemTermo } from './CampoBusca.jsx'
+import DetalhesLicitacao from './DetalhesLicitacao.jsx'
+import FiltrosSelects, { diasParaVencer, passaClassificacao, passaVencimento } from './Filtros.jsx'
 
 const ESTAGIOS = [
   { id: 'identificada', rotulo: 'Identificada' },
@@ -27,17 +29,6 @@ const dataBr = (iso) => {
   if (!iso) return null
   const [a, m, d] = String(iso).slice(0, 10).split('-')
   return a && m && d ? `${d}/${m}/${a}` : null
-}
-
-// Dias até o vencimento (data_encerramento), comparando só as datas (hoje = 0).
-// Retorna null quando não há data válida.
-const diasParaVencer = (iso) => {
-  if (!iso) return null
-  const alvo = new Date(`${String(iso).slice(0, 10)}T00:00:00`)
-  if (isNaN(alvo)) return null
-  const hoje = new Date()
-  hoje.setHours(0, 0, 0, 0)
-  return Math.round((alvo - hoje) / 86400000)
 }
 
 // Estado visual do cartão pela proximidade do vencimento — só em estágios ativos.
@@ -66,6 +57,7 @@ export default function Pipeline() {
   const [lics, setLics] = useState(null)
   const [erro, setErro] = useState('')
   const [docsLic, setDocsLic] = useState(null) // licitação com modal de documentação aberto
+  const [detalheLic, setDetalheLic] = useState(null) // licitação com modal de detalhes aberto
   const [busca, setBusca] = useState('')
   const [ufFiltro, setUfFiltro] = useState('todas')
   const [classFiltro, setClassFiltro] = useState('todas')
@@ -87,23 +79,13 @@ export default function Pipeline() {
   const termo = normalizar(busca.trim())
   const filtroAtivo =
     termo !== '' || ufFiltro !== 'todas' || classFiltro !== 'todas' || vencFiltro !== 'qualquer'
-  const passaVencimento = (o) => {
-    if (vencFiltro === 'qualquer') return true
-    const dias = diasParaVencer(o.licitacao?.data_encerramento)
-    if (dias == null) return false
-    if (vencFiltro === 'vencidas') return dias < 0
-    return dias >= 0 && dias <= Number(vencFiltro)
-  }
   const opsVisiveis = !filtroAtivo
     ? ops
     : ops.filter((o) => {
         const lic = o.licitacao
         if (ufFiltro !== 'todas' && lic?.uf !== ufFiltro) return false
-        if (classFiltro !== 'todas') {
-          const cls = lic?.analise?.classificacao_final || ''
-          if (classFiltro === 'sem_analise' ? cls !== '' : cls !== classFiltro) return false
-        }
-        if (!passaVencimento(o)) return false
+        if (!passaClassificacao(lic?.analise, classFiltro)) return false
+        if (!passaVencimento(lic?.data_encerramento, vencFiltro)) return false
         if (!termo) return true
         return contemTermo(termo, [
           lic?.objeto,
@@ -132,6 +114,15 @@ export default function Pipeline() {
       <div className="modal-fundo" onClick={() => setDocsLic(null)}>
         <div className="modal" onClick={(e) => e.stopPropagation()}>
           <Documentacao licitacao={docsLic} aoFechar={() => setDocsLic(null)} />
+        </div>
+      </div>
+    )}
+    {detalheLic && (
+      <div className="modal-fundo" onClick={() => setDetalheLic(null)}>
+        <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <button type="button" className="doc-fechar modal-fechar" title="Fechar"
+            onClick={() => setDetalheLic(null)}>✕</button>
+          <DetalhesLicitacao licitacao={detalheLic} />
         </div>
       </div>
     )}
@@ -172,41 +163,11 @@ export default function Pipeline() {
         aoMudar={setBusca}
         placeholder="Buscar por órgão, objeto, município, pregão ou responsável…"
       />
-      <select
-        className="filtro-uf"
-        value={ufFiltro}
-        onChange={(e) => setUfFiltro(e.target.value)}
-        aria-label="Filtrar por UF"
-      >
-        <option value="todas">Todas as UFs</option>
-        <option value="RS">RS</option>
-        <option value="SC">SC</option>
-        <option value="PR">PR</option>
-      </select>
-      <select
-        className="filtro-uf"
-        value={classFiltro}
-        onChange={(e) => setClassFiltro(e.target.value)}
-        aria-label="Filtrar por classificação da IA"
-      >
-        <option value="todas">Todas as classificações</option>
-        {Object.entries(CLASSIFICACAO_VISUAL).map(([valor, v]) => (
-          <option key={valor} value={valor}>{v.rotulo}</option>
-        ))}
-        <option value="sem_analise">Sem análise</option>
-      </select>
-      <select
-        className="filtro-uf"
-        value={vencFiltro}
-        onChange={(e) => setVencFiltro(e.target.value)}
-        aria-label="Filtrar por vencimento"
-      >
-        <option value="qualquer">Qualquer vencimento</option>
-        <option value="7">Vence em até 7 dias</option>
-        <option value="14">Vence em até 14 dias</option>
-        <option value="30">Vence em até 30 dias</option>
-        <option value="vencidas">Vencidas</option>
-      </select>
+      <FiltrosSelects
+        uf={ufFiltro} setUf={setUfFiltro}
+        cls={classFiltro} setCls={setClassFiltro}
+        venc={vencFiltro} setVenc={setVencFiltro}
+      />
       {filtroAtivo && (
         <span className="busca-contagem">
           {opsVisiveis.length} de {ops.length} oportunidades
@@ -229,7 +190,12 @@ export default function Pipeline() {
             const identificada = dataBr(lic?.criado_em)
             const vencimento = dataBr(lic?.data_encerramento)
             return (
-            <div key={op.id} className={`cartao${prazo ? ` ${prazo}` : ''}`}>
+            <div
+              key={op.id}
+              className={`cartao clicavel${prazo ? ` ${prazo}` : ''}`}
+              title="Clique para ver os detalhes da licitação"
+              onClick={() => lic && setDetalheLic(lic)}
+            >
               <div className="cartao-topo">
                 <strong className="cartao-titulo" title={titulo}>{titulo}</strong>
                 {prazo === 'prazo-vencida' && <span className="selo-vencida">Vencida</span>}
@@ -262,7 +228,7 @@ export default function Pipeline() {
                   <span className="cartao-venc" title={`Vence em ${vencimento}`}>Vence {vencimento}</span>
                 )}
               </small>
-              <div className="acoes">
+              <div className="acoes" onClick={(e) => e.stopPropagation()}>
                 <button title="Voltar estágio" aria-label="Voltar estágio" onClick={() => mover(op, -1)}>←</button>
                 {lic && (
                   <button onClick={() => setDocsLic(lic)}>docs</button>
