@@ -3,7 +3,7 @@ import { api } from '../api.js'
 import Documentacao from './Documentacao.jsx'
 import CampoBusca, { normalizar, contemTermo } from './CampoBusca.jsx'
 import DetalhesLicitacao from './DetalhesLicitacao.jsx'
-import FiltrosSelects, { diasParaVencer, passaClassificacao, passaVencimento } from './Filtros.jsx'
+import FiltrosSelects, { diasParaVencer, passaClassificacao, passaSituacao, passaVencimento } from './Filtros.jsx'
 
 const ESTAGIOS = [
   { id: 'identificada', rotulo: 'Identificada' },
@@ -32,7 +32,9 @@ const dataBr = (iso) => {
 }
 
 // Estado visual do cartão pela proximidade do vencimento — só em estágios ativos.
+// Certame suspenso: prazo antigo não vale, alerta silenciado até reativar.
 const estadoPrazo = (op) => {
+  if (op.licitacao?.suspensa) return ''
   if (op.estagio === 'ganhou' || op.estagio === 'perdeu_nogo') return ''
   const dias = diasParaVencer(op.licitacao?.data_encerramento)
   if (dias == null) return ''
@@ -62,6 +64,7 @@ export default function Pipeline() {
   const [ufFiltro, setUfFiltro] = useState('todas')
   const [classFiltro, setClassFiltro] = useState('todas')
   const [vencFiltro, setVencFiltro] = useState('qualquer')
+  const [sitFiltro, setSitFiltro] = useState('todas')
 
   const carregar = () => api.oportunidades().then(setOps).catch((e) => setErro(e.message))
   useEffect(() => {
@@ -78,7 +81,8 @@ export default function Pipeline() {
   // de UF, classificação da IA e proximidade do vencimento
   const termo = normalizar(busca.trim())
   const filtroAtivo =
-    termo !== '' || ufFiltro !== 'todas' || classFiltro !== 'todas' || vencFiltro !== 'qualquer'
+    termo !== '' || ufFiltro !== 'todas' || classFiltro !== 'todas' ||
+    vencFiltro !== 'qualquer' || sitFiltro !== 'todas'
   const opsVisiveis = !filtroAtivo
     ? ops
     : ops.filter((o) => {
@@ -86,6 +90,7 @@ export default function Pipeline() {
         if (ufFiltro !== 'todas' && lic?.uf !== ufFiltro) return false
         if (!passaClassificacao(lic?.analise, classFiltro)) return false
         if (!passaVencimento(lic?.data_encerramento, vencFiltro)) return false
+        if (!passaSituacao(lic, sitFiltro)) return false
         if (!termo) return true
         return contemTermo(termo, [
           lic?.objeto,
@@ -122,7 +127,7 @@ export default function Pipeline() {
         <div className="modal" onClick={(e) => e.stopPropagation()}>
           <button type="button" className="doc-fechar modal-fechar" title="Fechar"
             onClick={() => setDetalheLic(null)}>✕</button>
-          <DetalhesLicitacao licitacao={detalheLic} />
+          <DetalhesLicitacao licitacao={detalheLic} aoMudar={carregar} />
         </div>
       </div>
     )}
@@ -167,6 +172,7 @@ export default function Pipeline() {
         uf={ufFiltro} setUf={setUfFiltro}
         cls={classFiltro} setCls={setClassFiltro}
         venc={vencFiltro} setVenc={setVencFiltro}
+        sit={sitFiltro} setSit={setSitFiltro}
       />
       {filtroAtivo && (
         <span className="busca-contagem">
@@ -198,6 +204,7 @@ export default function Pipeline() {
             >
               <div className="cartao-topo">
                 <strong className="cartao-titulo" title={titulo}>{titulo}</strong>
+                {lic?.suspensa && <span className="selo-suspensa">Suspensa</span>}
                 {prazo === 'prazo-vencida' && <span className="selo-vencida">Vencida</span>}
               </div>
               <p className="cartao-resumo">{analise?.objeto_resumido || lic?.objeto}</p>

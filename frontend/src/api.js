@@ -34,6 +34,8 @@ export const api = {
   dashboard: (dias = 30) => req(`/api/dashboard?dias=${dias}`),
   licitacoes: (params = '') => req(`/api/licitacoes${params}`),
   criarLicitacao: (dados) => req('/api/licitacoes', post(dados)),
+  atualizarLicitacao: (id, patch) =>
+    req(`/api/licitacoes/${id}`, { ...post(patch), method: 'PATCH' }),
   extrairLicitacao: (texto, url) => req('/api/licitacoes/extrair', post({ texto, url })),
   extrairLicitacaoPdf: (arquivo) => {
     const fd = new FormData()

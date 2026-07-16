@@ -365,6 +365,51 @@ def obter_licitacao(licitacao_id: int, db: Session = Depends(get_db)):
     return _licitacao_out(lic, db, incluir_raw=True)
 
 
+class LicitacaoPatch(BaseModel):
+    """Campos editáveis pelo time. Só o que vier no corpo é alterado.
+
+    Caso de uso principal: certame suspenso volta com data de vencimento nova —
+    edita o vencimento, reativa e reanalisa para comparar com o edital anterior.
+    """
+    orgao: str | None = None
+    municipio: str | None = None
+    uf: str | None = None
+    modalidade: str | None = None
+    objeto: str | None = None
+    valor_estimado: float | None = None
+    data_abertura: str | None = None
+    data_encerramento: str | None = None
+    link: str | None = None
+    suspensa: bool | None = None
+
+
+@router.patch("/licitacoes/{licitacao_id}")
+def atualizar_licitacao(
+    licitacao_id: int,
+    dados: LicitacaoPatch,
+    usuario: Usuario = Depends(usuario_atual),
+    db: Session = Depends(get_db),
+):
+    lic = db.get(Licitacao, licitacao_id)
+    if not lic:
+        raise HTTPException(404, "Licitação não encontrada")
+
+    mudancas = dados.model_dump(exclude_unset=True)
+    if not mudancas:
+        raise HTTPException(400, "Nenhum campo para atualizar")
+    if "uf" in mudancas and mudancas["uf"]:
+        mudancas["uf"] = mudancas["uf"].strip().upper()[:2]
+    for campo, valor in mudancas.items():
+        setattr(lic, campo, valor)
+    db.commit()
+
+    detalhe = ", ".join(
+        f"{campo}={valor!r}" for campo, valor in mudancas.items()
+    )
+    registrar_evento(db, usuario, "editar_licitacao", licitacao_id=lic.id, detalhe=detalhe[:300])
+    return _licitacao_out(lic, db)
+
+
 # ---------- Documentação (checklist + anexos) ----------
 
 MAX_ANEXO_BYTES = 25 * 1024 * 1024  # 25 MB por arquivo
@@ -752,7 +797,8 @@ def _licitacao_out(l: Licitacao, db: Session, incluir_raw: bool = False):
         "municipio": l.municipio, "uf": l.uf, "modalidade": l.modalidade, "objeto": l.objeto,
         "valor_estimado": l.valor_estimado, "data_abertura": l.data_abertura,
         "data_encerramento": l.data_encerramento, "link": l.link,
-        "status_analise": l.status_analise, "analise": _analise_out(analise),
+        "status_analise": l.status_analise, "suspensa": l.suspensa,
+        "analise": _analise_out(analise),
         # Data de identificação da licitação (quando entrou no sistema)
         "criado_em": l.criado_em.isoformat() if l.criado_em else None,
     }

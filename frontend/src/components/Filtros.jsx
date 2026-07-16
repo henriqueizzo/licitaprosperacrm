@@ -34,7 +34,12 @@ export const passaVencimento = (iso, filtro) => {
   return dias >= 0 && dias <= Number(filtro)
 }
 
-export default function FiltrosSelects({ uf, setUf, cls, setCls, venc, setVenc }) {
+export const passaSituacao = (licitacao, filtro) => {
+  if (filtro === 'todas') return true
+  return filtro === 'suspensas' ? !!licitacao?.suspensa : !licitacao?.suspensa
+}
+
+export default function FiltrosSelects({ uf, setUf, cls, setCls, venc, setVenc, sit, setSit }) {
   return (
     <>
       <select className="filtro-uf" value={uf} onChange={(e) => setUf(e.target.value)}
@@ -60,6 +65,14 @@ export default function FiltrosSelects({ uf, setUf, cls, setCls, venc, setVenc }
         <option value="30">Vence em até 30 dias</option>
         <option value="vencidas">Vencidas</option>
       </select>
+      {sit !== undefined && (
+        <select className="filtro-uf" value={sit} onChange={(e) => setSit(e.target.value)}
+          aria-label="Filtrar por situação">
+          <option value="todas">Ativas e suspensas</option>
+          <option value="ativas">Só ativas</option>
+          <option value="suspensas">Só suspensas</option>
+        </select>
+      )}
     </>
   )
 }

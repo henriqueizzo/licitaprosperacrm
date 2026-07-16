@@ -3,7 +3,7 @@ import { api } from '../api.js'
 import Documentacao from './Documentacao.jsx'
 import CampoBusca, { normalizar, contemTermo } from './CampoBusca.jsx'
 import DetalhesLicitacao from './DetalhesLicitacao.jsx'
-import FiltrosSelects, { passaClassificacao, passaVencimento } from './Filtros.jsx'
+import FiltrosSelects, { passaClassificacao, passaSituacao, passaVencimento } from './Filtros.jsx'
 
 const brl = (v) =>
   v == null ? '—' : v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
@@ -46,6 +46,7 @@ export default function Licitacoes() {
   const [ufFiltro, setUfFiltro] = useState('todas')
   const [classFiltro, setClassFiltro] = useState('todas')
   const [vencFiltro, setVencFiltro] = useState('qualquer')
+  const [sitFiltro, setSitFiltro] = useState('todas')
 
   const carregar = () => api.licitacoes().then(setItens).catch((e) => setErro(e.message))
   useEffect(() => { carregar() }, [])
@@ -67,13 +68,15 @@ export default function Licitacoes() {
   // Busca + filtros client-side, sem acento — mesmos filtros do kanban
   const termo = normalizar(busca.trim())
   const filtroAtivo =
-    termo !== '' || ufFiltro !== 'todas' || classFiltro !== 'todas' || vencFiltro !== 'qualquer'
+    termo !== '' || ufFiltro !== 'todas' || classFiltro !== 'todas' ||
+    vencFiltro !== 'qualquer' || sitFiltro !== 'todas'
   const visiveis = !filtroAtivo
     ? itens
     : itens.filter((l) => {
         if (ufFiltro !== 'todas' && l.uf !== ufFiltro) return false
         if (!passaClassificacao(l.analise, classFiltro)) return false
         if (!passaVencimento(l.data_encerramento, vencFiltro)) return false
+        if (!passaSituacao(l, sitFiltro)) return false
         if (!termo) return true
         return contemTermo(termo, [
           l.objeto,
@@ -101,6 +104,7 @@ export default function Licitacoes() {
         uf={ufFiltro} setUf={setUfFiltro}
         cls={classFiltro} setCls={setClassFiltro}
         venc={vencFiltro} setVenc={setVencFiltro}
+        sit={sitFiltro} setSit={setSitFiltro}
       />
       {filtroAtivo && (
         <span className="busca-contagem">
@@ -125,7 +129,10 @@ export default function Licitacoes() {
               <td>{l.uf}</td>
               <td>{brl(l.valor_estimado)}</td>
               <td>{dataBr(l.criado_em)}</td>
-              <td>{dataBr(l.data_encerramento)}</td>
+              <td>
+                {dataBr(l.data_encerramento)}
+                {l.suspensa && <> <span className="selo-suspensa">Suspensa</span></>}
+              </td>
               <td>
                 {l.analise ? (
                   l.analise.classificacao_final ? (
@@ -172,7 +179,7 @@ export default function Licitacoes() {
             {aberta === l.id && (
               <tr className="detalhe">
                 <td colSpan={8}>
-                  <DetalhesLicitacao licitacao={l} />
+                  <DetalhesLicitacao licitacao={l} aoMudar={carregar} />
                 </td>
               </tr>
             )}

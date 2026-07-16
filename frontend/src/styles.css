@@ -1250,3 +1250,27 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 .detalhes-meta small { color: var(--texto-mudo); font-size: 0.7rem; }
 .detalhes-lic details { margin-top: 8px; }
 .detalhes-lic pre { font-size: 0.78rem; }
+
+/* ---------- Suspensa + edicao de campos nos detalhes ---------- */
+.selo-suspensa {
+  display: inline-block; padding: 1px 8px; border-radius: 999px;
+  font-size: 0.64rem; font-weight: 600; white-space: nowrap; flex: none;
+  background: var(--amarelo-fundo, #fef3c7); color: var(--amarelo-texto, #92400e);
+  border: 1px solid var(--amarelo-borda, #fcd34d);
+}
+.cartao .selo-suspensa { font-size: 0.6rem; }
+.detalhes-selos { display: inline-flex; gap: 6px; align-items: center; flex: none; }
+.detalhes-acoes { display: flex; gap: 8px; flex-wrap: wrap; margin: 4px 0 10px; }
+.detalhes-acoes button {
+  padding: 5px 12px; font-size: 0.78rem; border-radius: 999px;
+  border: 1px solid var(--linha, #e2e8f0); background: #fff; cursor: pointer;
+}
+.detalhes-acoes button:hover { border-color: var(--azul, #2563eb); color: var(--azul, #2563eb); }
+.detalhes-acoes button:disabled { opacity: 0.55; cursor: wait; }
+.detalhes-editar {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px; align-items: end; padding: 12px;
+  background: var(--panel-2, #f8fafc); border: 1px solid var(--linha, #e2e8f0);
+  border-radius: var(--raio-sm, 12px); margin-bottom: 10px;
+}
+.detalhes-editar label { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; }

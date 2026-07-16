@@ -79,6 +79,9 @@ class Licitacao(Base):
     link: Mapped[str] = mapped_column(Text, default="")
     edital_url: Mapped[str] = mapped_column(Text, default="")
     status_analise: Mapped[str] = mapped_column(String(20), default="pendente")  # pendente|analisada|erro|descartada_filtro
+    # Certame suspenso (marcado pelo time): silencia o alerta de prazo no card
+    # até a licitação ser reativada — o prazo antigo deixa de valer.
+    suspensa: Mapped[bool] = mapped_column(Boolean, default=False)
     raw_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     criado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 

@@ -36,8 +36,13 @@ def _migracoes_analises(dialeto: str) -> dict[str, str]:
 
 def _migracoes(dialeto: str) -> dict[str, dict[str, str]]:
     """Colunas novas por tabela, para bancos criados antes delas existirem."""
+    bool_false = "0" if dialeto == "sqlite" else "FALSE"
     return {
         "analises": _migracoes_analises(dialeto),
+        # Marcador de certame suspenso (silencia o alerta de prazo do card)
+        "licitacoes": {
+            "suspensa": f"BOOLEAN NOT NULL DEFAULT {bool_false}",
+        },
         "execucoes_pipeline": {
             "avisos": "JSON",
         },
