@@ -3,6 +3,7 @@ import { api } from '../api.js'
 import Documentacao from './Documentacao.jsx'
 import CampoBusca, { normalizar, contemTermo } from './CampoBusca.jsx'
 import DetalhesLicitacao from './DetalhesLicitacao.jsx'
+import Janela from './Janela.jsx'
 import FiltrosSelects, { diasParaVencer, passaClassificacao, passaSituacao, passaVencimento } from './Filtros.jsx'
 
 const ESTAGIOS = [
@@ -123,13 +124,14 @@ export default function Pipeline() {
       </div>
     )}
     {detalheLic && (
-      <div className="modal-fundo" onClick={() => setDetalheLic(null)}>
-        <div className="modal" onClick={(e) => e.stopPropagation()}>
-          <button type="button" className="doc-fechar modal-fechar" title="Fechar"
-            onClick={() => setDetalheLic(null)}>✕</button>
-          <DetalhesLicitacao licitacao={detalheLic} aoMudar={carregar} />
-        </div>
-      </div>
+      <Janela
+        titulo={[detalheLic.orgao || 'Licitação',
+          detalheLic.municipio && `${detalheLic.municipio}/${detalheLic.uf}`]
+          .filter(Boolean).join(' — ')}
+        aoFechar={() => setDetalheLic(null)}
+      >
+        <DetalhesLicitacao licitacao={detalheLic} aoMudar={carregar} />
+      </Janela>
     )}
     <div className="cockpit">
       <div className="tile">

@@ -1274,3 +1274,46 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
   border-radius: var(--raio-sm, 12px); margin-bottom: 10px;
 }
 .detalhes-editar label { display: flex; flex-direction: column; gap: 4px; font-size: 0.75rem; }
+
+/* ---------- Janela de detalhes (cabecalho azul + controles de janela) ---------- */
+.janela {
+  width: 100%; max-width: 880px; display: flex; flex-direction: column;
+  background: var(--panel); border: 1px solid var(--linha);
+  border-radius: var(--raio); box-shadow: var(--sombra-md);
+  overflow: hidden; max-height: calc(100vh - 80px);
+}
+.modal-fundo-max { padding: 16px; align-items: stretch; }
+.janela-max { max-width: none; max-height: none; height: calc(100vh - 32px); }
+.janela-cabecalho {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 11px 12px 11px 18px; background: var(--azul); flex: none;
+}
+.janela-cabecalho strong {
+  color: #fff; font-weight: 600; font-size: 0.9rem;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.janela-botoes { display: inline-flex; gap: 6px; flex: none; }
+.janela-botoes button {
+  width: 26px; height: 26px; border-radius: 999px; border: none;
+  background: rgba(255, 255, 255, 0.18); color: #fff; cursor: pointer;
+  font-size: 0.72rem; line-height: 1; display: grid; place-items: center; padding: 0;
+}
+.janela-botoes button:hover { background: rgba(255, 255, 255, 0.34); }
+.janela-corpo { padding: 16px 20px 20px; overflow: auto; }
+/* o titulo da janela ja mostra o orgao - evita repetir em letras garrafais logo abaixo */
+.janela-corpo .detalhes-cabecalho > div > strong { display: none; }
+.janela-min {
+  position: fixed; right: 16px; bottom: 16px; z-index: 60;
+  display: flex; align-items: center; gap: 10px; max-width: 360px;
+  background: var(--azul); color: #fff; border-radius: 999px;
+  padding: 8px 10px 8px 18px; box-shadow: var(--sombra-md); cursor: pointer;
+}
+.janela-min-titulo {
+  font-size: 0.8rem; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+@media (max-width: 760px) {
+  .janela { max-height: calc(100vh - 32px); }
+  .janela-corpo { padding: 12px 14px 16px; }
+  .janela-min { left: 16px; max-width: none; }
+}
