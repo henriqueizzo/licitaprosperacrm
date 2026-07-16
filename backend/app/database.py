@@ -46,14 +46,16 @@ def _migracoes(dialeto: str) -> dict[str, dict[str, str]]:
             "ultimo_acesso": "TIMESTAMP",
         },
         # Dados oficiais da empresa para as declarações geradas em Word.
-        # Defaults do representante já preenchidos p/ bancos existentes (produção).
+        # DDL SÓ COM ASCII: literal com acento em ALTER TABLE chegou corrompido ao
+        # Postgres de produção ('Benefícios' virou mojibake). Valores acentuados são
+        # aplicados depois, via UPDATE com parâmetro bound (o driver codifica certo).
         "perfil_empresa": {
             "razao_social": "TEXT NOT NULL DEFAULT ''",
             "cnpj": "TEXT NOT NULL DEFAULT ''",
             "endereco": "TEXT NOT NULL DEFAULT ''",
             "cidade_sede": "TEXT NOT NULL DEFAULT ''",
             "representante_nome": "TEXT NOT NULL DEFAULT 'Dario'",
-            "representante_cargo": "TEXT NOT NULL DEFAULT 'CEO — Prospera Benefícios'",
+            "representante_cargo": "TEXT NOT NULL DEFAULT ''",
         },
     }
 
@@ -116,6 +118,21 @@ def migrar_esquema() -> list[str]:
                 ))
                 if res.rowcount:
                     criadas.append(f"backfill_oportunidades({res.rowcount})")
+        # Preenche/conserta o cargo padrão do representante com parâmetro bound
+        # (nunca em DDL — ver comentário em _migracoes). Só mexe quando o valor está
+        # vazio ou contém U+FFFD (marca da corrupção); personalização do usuário fica.
+        if "perfil_empresa" in tabelas:
+            res = conn.execute(
+                text(
+                    "UPDATE perfil_empresa SET representante_cargo = :v "
+                    "WHERE representante_cargo = '' "
+                    "OR representante_cargo LIKE '%' || :fffd || '%'"
+                ),
+                {"v": "CEO — Prospera Benefícios", "fffd": "�"},
+            )
+            if res.rowcount:
+                criadas.append(f"perfil.representante_cargo({res.rowcount})")
+
         if engine.dialect.name != "sqlite":
             for (tabela, coluna), tipo in _ALARGAMENTOS.items():
                 if tabela not in tabelas:
