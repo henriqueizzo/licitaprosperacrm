@@ -356,20 +356,37 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 
 /* ---------- Kanban (Pipeline) ---------- */
 .kanban { display: flex; gap: 14px; overflow-x: auto; align-items: flex-start; padding-bottom: 14px; }
+/* Barras de rolagem do quadro sempre discretas e visíveis */
+.kanban::-webkit-scrollbar { height: 10px; }
+.coluna::-webkit-scrollbar { width: 8px; }
+.kanban::-webkit-scrollbar-thumb, .coluna::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+.kanban::-webkit-scrollbar-track, .coluna::-webkit-scrollbar-track { background: transparent; }
 .coluna {
   background: rgba(248, 250, 252, 0.7);
   border: 1px solid var(--linha);
   border-radius: var(--raio);
-  padding: 12px;
+  padding: 0 12px 12px;    /* o respiro do topo fica no h3 sticky */
   min-width: 250px;
   flex: 1;
+  /* Rolagem vertical por coluna: o quadro cabe na tela e a barra horizontal
+     fica sempre ao alcance, mesmo com dezenas de cartões numa coluna */
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
 }
 .coluna h3 {
   font-family: var(--display);
   font-weight: 600;
   font-size: 0.8rem;
   color: #334155;
-  margin-bottom: 10px;
+  position: sticky;        /* título visível enquanto a coluna rola */
+  top: 0;
+  z-index: 2;
+  background: #f8fafc;
+  padding: 12px 0 8px;
+  margin-bottom: 2px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -466,7 +483,7 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
   flex: none;
 }
 .acoes { display: flex; justify-content: space-between; gap: 6px; margin-top: 10px; }
-.cartao .acoes { margin-top: 7px; }
+.cartao .acoes { margin-top: 7px; flex-wrap: wrap; }
 .cartao .acoes button, .cartao .acoes a { padding: 3px 8px; font-size: 0.7rem; }
 
 /* Faixa de classificação da IA na lateral esquerda do cartão (decisão 2026-07-17):
@@ -484,14 +501,24 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 .cartao.faixa-amarelo::before { background: var(--amarelo); }
 .cartao.faixa-vermelho::before { background: var(--vermelho); }
 
-/* Drag & drop: cartão em movimento acima das colunas; coluna de destino realçada */
+/* Drag & drop: o clone no DragOverlay segue o ponteiro; o original vira fantasma */
 .cartao.arrastando {
-  z-index: 40;
   box-shadow: var(--sombra-md);
   opacity: 0.95;
   cursor: grabbing;
+  margin-bottom: 0;
 }
+.cartao.fantasma { opacity: 0.35; }
 .coluna.solta-aqui { border-color: var(--azul-luz); background: var(--azul-suave); }
+.coluna.solta-aqui h3 { background: var(--azul-suave); }
+
+/* Botão de excluir no cartão — mesmo vermelho pastel dos detalhes */
+.cartao .acoes .btn-excluir {
+  color: var(--vermelho-texto);
+  border-color: var(--vermelho-borda);
+  background: var(--vermelho-fundo);
+}
+.cartao .acoes .btn-excluir:hover { border-color: var(--vermelho-texto); }
 
 /* Chip do responsável (iniciais) no topo do cartão */
 .resp-chip {

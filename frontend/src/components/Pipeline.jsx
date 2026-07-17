@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   DndContext,
+  DragOverlay,
   MouseSensor,
   TouchSensor,
   useDraggable,
@@ -90,9 +91,14 @@ function Coluna({ estagio, rotulo, contagem, children }) {
   )
 }
 
-function Cartao({ op, aoAbrir, aoAbrirDocs, aoMover, aoSalvarResponsavel, foiArraste }) {
+// Conteúdo do cartão, sem hooks de arraste: usado dentro da coluna (via Cartao)
+// e clonado no DragOverlay — que segue o ponteiro por cima de tudo, sem ser
+// recortado pela rolagem vertical das colunas
+function CartaoVisual({
+  op, aoAbrir, aoAbrirDocs, aoMover, aoExcluir, aoSalvarResponsavel,
+  foiArraste, refArraste, atributos, classesExtra,
+}) {
   const [editandoResp, setEditandoResp] = useState(false)
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: op.id })
 
   const prazo = estadoPrazo(op)
   const lic = op.licitacao
@@ -116,23 +122,21 @@ function Cartao({ op, aoAbrir, aoAbrirDocs, aoMover, aoSalvarResponsavel, foiArr
     e.preventDefault()
     const nome = new FormData(e.target).get('nome').trim()
     setEditandoResp(false)
-    if (nome !== (op.responsavel || '')) await aoSalvarResponsavel(op, nome)
+    if (nome !== (op.responsavel || '')) await aoSalvarResponsavel?.(op, nome)
   }
 
   return (
     <div
-      ref={setNodeRef}
-      {...listeners}
-      {...attributes}
-      style={transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined}
+      ref={refArraste}
+      {...atributos}
       className={[
         'cartao clicavel',
         prazo,
         visual ? `faixa-${visual.tom}` : '',
-        isDragging ? 'arrastando' : '',
+        classesExtra || '',
       ].filter(Boolean).join(' ')}
       title="Clique para ver os detalhes · arraste para mudar de estágio"
-      onClick={() => !foiArraste() && lic && aoAbrir(lic)}
+      onClick={() => !foiArraste?.() && lic && aoAbrir?.(lic)}
     >
       <div className="cartao-topo">
         <strong className="cartao-titulo" title={titulo}>{titulo}</strong>
@@ -194,18 +198,34 @@ function Cartao({ op, aoAbrir, aoAbrirDocs, aoMover, aoSalvarResponsavel, foiArr
         )}
       </small>
       <div className="acoes" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
-        <button title="Voltar estágio" aria-label="Voltar estágio" onClick={() => aoMover(op, -1)}>←</button>
+        <button title="Voltar estágio" aria-label="Voltar estágio" onClick={() => aoMover?.(op, -1)}>←</button>
         {lic && (
-          <button className={docsCompleto ? 'docs-completo' : ''} onClick={() => aoAbrirDocs(lic)}>
+          <button className={docsCompleto ? 'docs-completo' : ''} onClick={() => aoAbrirDocs?.(lic)}>
             {docsRotulo}
           </button>
         )}
         {lic?.link && (
           <a href={lic.link} target="_blank" rel="noreferrer">edital ↗</a>
         )}
-        <button title="Avançar estágio" aria-label="Avançar estágio" onClick={() => aoMover(op, 1)}>→</button>
+        <button className="btn-excluir" title="Exclui a licitação, o card, a análise e os documentos — sem desfazer"
+          aria-label="Excluir licitação" onClick={() => aoExcluir?.(op)}>🗑</button>
+        <button title="Avançar estágio" aria-label="Avançar estágio" onClick={() => aoMover?.(op, 1)}>→</button>
       </div>
     </div>
+  )
+}
+
+// Casca arrastável do cartão: registra o drag e apaga o original enquanto o
+// clone anda no DragOverlay
+function Cartao(props) {
+  const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: props.op.id })
+  return (
+    <CartaoVisual
+      {...props}
+      refArraste={setNodeRef}
+      atributos={{ ...listeners, ...attributes }}
+      classesExtra={isDragging ? 'fantasma' : ''}
+    />
   )
 }
 
@@ -220,6 +240,7 @@ export default function Pipeline() {
   const [classFiltro, setClassFiltro] = useState('todas')
   const [vencFiltro, setVencFiltro] = useState('qualquer')
   const [sitFiltro, setSitFiltro] = useState('todas')
+  const [opArrastada, setOpArrastada] = useState(null) // clone no DragOverlay
   // Momento do fim do último arraste: o click que o navegador dispara logo
   // depois do drop não deve abrir o modal de detalhes
   const fimArraste = useRef(0)
@@ -287,12 +308,35 @@ export default function Pipeline() {
     await mudarEstagio(op, destino.id)
   }
 
+  function aoIniciarArraste(ev) {
+    setOpArrastada(ops.find((o) => o.id === ev.active.id) || null)
+  }
+
   function aoTerminarArraste(ev) {
+    setOpArrastada(null)
     fimArraste.current = Date.now()
     const destino = ev.over?.id
     const op = ops.find((o) => o.id === ev.active.id)
     if (!destino || !op || op.estagio === destino) return
     mudarEstagio(op, destino)
+  }
+
+  async function excluir(op) {
+    const lic = op.licitacao
+    if (!lic) return
+    const nome = [lic.orgao, lic.municipio && `${lic.municipio}/${lic.uf}`].filter(Boolean).join(' — ')
+    if (!window.confirm(
+      `Excluir DEFINITIVAMENTE a licitação?\n\n${nome}\n\n` +
+      'O card, a análise da IA e os documentos anexados serão apagados, ' +
+      'e a coleta automática não vai trazê-la de volta. Essa ação não tem desfazer.'
+    )) return
+    try {
+      await api.excluirLicitacao(lic.id)
+    } catch (e) {
+      window.alert(`Não foi possível excluir: ${e.message}`)
+    }
+    carregar()
+    api.licitacoes().then(setLics).catch(() => {})
   }
 
   async function salvarResponsavel(op, nome) {
@@ -378,7 +422,12 @@ export default function Pipeline() {
     <datalist id="resp-sugestoes">
       {responsaveis.map((r) => <option key={r} value={r} />)}
     </datalist>
-    <DndContext sensors={sensores} onDragEnd={aoTerminarArraste}>
+    <DndContext
+      sensors={sensores}
+      onDragStart={aoIniciarArraste}
+      onDragEnd={aoTerminarArraste}
+      onDragCancel={() => setOpArrastada(null)}
+    >
       <div className="kanban">
         {ESTAGIOS.map((est) => {
           const doEstagio = opsVisiveis.filter((o) => o.estagio === est.id)
@@ -391,6 +440,7 @@ export default function Pipeline() {
                   aoAbrir={setDetalheLic}
                   aoAbrirDocs={setDocsLic}
                   aoMover={mover}
+                  aoExcluir={excluir}
                   aoSalvarResponsavel={salvarResponsavel}
                   foiArraste={() => Date.now() - fimArraste.current < 300}
                 />
@@ -399,6 +449,9 @@ export default function Pipeline() {
           )
         })}
       </div>
+      <DragOverlay>
+        {opArrastada && <CartaoVisual op={opArrastada} classesExtra="arrastando" />}
+      </DragOverlay>
     </DndContext>
     </>
   )
