@@ -1,4 +1,13 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import {
+  DndContext,
+  MouseSensor,
+  TouchSensor,
+  useDraggable,
+  useDroppable,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core'
 import { api } from '../api.js'
 import Documentacao from './Documentacao.jsx'
 import CampoBusca, { normalizar, contemTermo } from './CampoBusca.jsx'
@@ -45,6 +54,21 @@ const estadoPrazo = (op) => {
   return ''
 }
 
+// Contagem regressiva no lugar da data ("Vence em 5d") — a data completa fica no title
+const textoVencimento = (dias) => {
+  if (dias == null) return null
+  if (dias < 0) return dias === -1 ? 'Venceu ontem' : `Venceu há ${-dias}d`
+  if (dias === 0) return 'Vence hoje'
+  if (dias === 1) return 'Vence amanhã'
+  return `Vence em ${dias}d`
+}
+
+// Iniciais do responsável para o chip ("Matheus Silva" → "MS")
+const iniciais = (nome) => {
+  const partes = String(nome).trim().split(/\s+/).filter(Boolean)
+  return partes.length ? (partes[0][0] + (partes[1]?.[0] || '')).toUpperCase() : '?'
+}
+
 const brlCompacto = (v) =>
   v == null
     ? null
@@ -54,6 +78,136 @@ const brlCompacto = (v) =>
         notation: 'compact',
         maximumFractionDigits: 1,
       })
+
+// Coluna do kanban: alvo de soltura do drag & drop (realce quando o cartão paira)
+function Coluna({ estagio, rotulo, contagem, children }) {
+  const { setNodeRef, isOver } = useDroppable({ id: estagio })
+  return (
+    <div ref={setNodeRef} className={`coluna${isOver ? ' solta-aqui' : ''}`}>
+      <h3>{rotulo} <span>{contagem}</span></h3>
+      {children}
+    </div>
+  )
+}
+
+function Cartao({ op, aoAbrir, aoAbrirDocs, aoMover, aoSalvarResponsavel, foiArraste }) {
+  const [editandoResp, setEditandoResp] = useState(false)
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: op.id })
+
+  const prazo = estadoPrazo(op)
+  const lic = op.licitacao
+  const analise = lic?.analise
+  const visual = CLASSIFICACAO_VISUAL[analise?.classificacao_final]
+  const titulo = [
+    lic?.orgao || 'Órgão não informado',
+    lic?.municipio ? `${lic.municipio}/${lic.uf}` : null,
+  ].filter(Boolean).join(' — ')
+  const identificada = dataBr(lic?.criado_em)
+  const vencimento = dataBr(lic?.data_encerramento)
+  const contagemVenc = textoVencimento(diasParaVencer(lic?.data_encerramento))
+  const docs = lic?.documentos
+  const docsRotulo =
+    docs?.itens > 0 ? `docs ${docs.anexados}/${docs.itens}`
+    : docs?.avulsos > 0 ? `docs (${docs.avulsos})`
+    : 'docs'
+  const docsCompleto = docs?.itens > 0 && docs.anexados >= docs.itens
+
+  async function enviarResponsavel(e) {
+    e.preventDefault()
+    const nome = new FormData(e.target).get('nome').trim()
+    setEditandoResp(false)
+    if (nome !== (op.responsavel || '')) await aoSalvarResponsavel(op, nome)
+  }
+
+  return (
+    <div
+      ref={setNodeRef}
+      {...listeners}
+      {...attributes}
+      style={transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined}
+      className={[
+        'cartao clicavel',
+        prazo,
+        visual ? `faixa-${visual.tom}` : '',
+        isDragging ? 'arrastando' : '',
+      ].filter(Boolean).join(' ')}
+      title="Clique para ver os detalhes · arraste para mudar de estágio"
+      onClick={() => !foiArraste() && lic && aoAbrir(lic)}
+    >
+      <div className="cartao-topo">
+        <strong className="cartao-titulo" title={titulo}>{titulo}</strong>
+        <span
+          className={`resp-chip${op.responsavel ? '' : ' vazio'}`}
+          title={op.responsavel ? `Responsável: ${op.responsavel} — clique para trocar` : 'Atribuir responsável'}
+          onClick={(e) => { e.stopPropagation(); setEditandoResp((v) => !v) }}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          {op.responsavel ? iniciais(op.responsavel) : '+'}
+        </span>
+        {lic?.suspensa && <span className="selo-suspensa">Suspensa</span>}
+        {prazo === 'prazo-vencida' && <span className="selo-vencida">Vencida</span>}
+      </div>
+      {editandoResp && (
+        <form
+          className="resp-form"
+          onSubmit={enviarResponsavel}
+          onClick={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <input
+            name="nome"
+            list="resp-sugestoes"
+            defaultValue={op.responsavel || ''}
+            placeholder="Nome do responsável"
+            autoFocus
+          />
+          <button type="submit" title="Salvar responsável">ok</button>
+          <button type="button" title="Cancelar" onClick={() => setEditandoResp(false)}>×</button>
+        </form>
+      )}
+      <p className="cartao-resumo">{analise?.objeto_resumido || lic?.objeto}</p>
+      <div className="cartao-ia">
+        {visual ? (
+          <>
+            <span className={`veredito ${visual.tom}`} title={analise.classificacao_final}>
+              {visual.rotulo}
+            </span>
+            {analise.score_beneficios != null && analise.score_pagamentos != null && (
+              <small className="cartao-scores">
+                B {analise.score_beneficios} · P {analise.score_pagamentos}
+              </small>
+            )}
+          </>
+        ) : (
+          <span className="veredito cinza">aguardando análise</span>
+        )}
+      </div>
+      <small className="cartao-meta">
+        {brlCompacto(lic?.valor_estimado) && (
+          <span className="cartao-valor">{brlCompacto(lic.valor_estimado)}</span>
+        )}
+        {identificada && (
+          <span title={`Identificada em ${identificada}`}>Ident. {identificada}</span>
+        )}
+        {contagemVenc && (
+          <span className="cartao-venc" title={`Vencimento: ${vencimento}`}>{contagemVenc}</span>
+        )}
+      </small>
+      <div className="acoes" onClick={(e) => e.stopPropagation()} onPointerDown={(e) => e.stopPropagation()}>
+        <button title="Voltar estágio" aria-label="Voltar estágio" onClick={() => aoMover(op, -1)}>←</button>
+        {lic && (
+          <button className={docsCompleto ? 'docs-completo' : ''} onClick={() => aoAbrirDocs(lic)}>
+            {docsRotulo}
+          </button>
+        )}
+        {lic?.link && (
+          <a href={lic.link} target="_blank" rel="noreferrer">edital ↗</a>
+        )}
+        <button title="Avançar estágio" aria-label="Avançar estágio" onClick={() => aoMover(op, 1)}>→</button>
+      </div>
+    </div>
+  )
+}
 
 export default function Pipeline() {
   const [ops, setOps] = useState([])
@@ -66,6 +220,16 @@ export default function Pipeline() {
   const [classFiltro, setClassFiltro] = useState('todas')
   const [vencFiltro, setVencFiltro] = useState('qualquer')
   const [sitFiltro, setSitFiltro] = useState('todas')
+  // Momento do fim do último arraste: o click que o navegador dispara logo
+  // depois do drop não deve abrir o modal de detalhes
+  const fimArraste = useRef(0)
+
+  // Mouse: 6px de tolerância separa clique de arraste; touch: segurar 250ms
+  // inicia o arraste sem brigar com a rolagem das colunas
+  const sensores = useSensors(
+    useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+  )
 
   const carregar = () => api.oportunidades().then(setOps).catch((e) => setErro(e.message))
   useEffect(() => {
@@ -77,6 +241,7 @@ export default function Pipeline() {
   const ganhas = ops.filter((o) => o.estagio === 'ganhou')
   const perdidas = ops.filter((o) => o.estagio === 'perdeu_nogo')
   const valorEmDisputa = abertas.reduce((soma, o) => soma + (o.licitacao?.valor_estimado || 0), 0)
+  const responsaveis = [...new Set(ops.map((o) => (o.responsavel || '').trim()).filter(Boolean))].sort()
 
   // Busca client-side (dados já carregados): texto sem acento + filtros rápidos
   // de UF, classificação da IA e proximidade do vencimento
@@ -104,11 +269,38 @@ export default function Pipeline() {
         ])
       })
 
+  async function mudarEstagio(op, destino) {
+    // Atualização otimista: o cartão fica na coluna de destino enquanto a API responde
+    setOps((prev) => prev.map((o) => (o.id === op.id ? { ...o, estagio: destino } : o)))
+    try {
+      await api.moverOportunidade(op.id, destino)
+    } catch (e) {
+      window.alert(`Não foi possível mover: ${e.message}`)
+    }
+    carregar()
+  }
+
   async function mover(op, direcao) {
     const i = ESTAGIOS.findIndex((e) => e.id === op.estagio)
     const destino = ESTAGIOS[i + direcao]
     if (!destino) return
-    await api.moverOportunidade(op.id, destino.id)
+    await mudarEstagio(op, destino.id)
+  }
+
+  function aoTerminarArraste(ev) {
+    fimArraste.current = Date.now()
+    const destino = ev.over?.id
+    const op = ops.find((o) => o.id === ev.active.id)
+    if (!destino || !op || op.estagio === destino) return
+    mudarEstagio(op, destino)
+  }
+
+  async function salvarResponsavel(op, nome) {
+    try {
+      await api.atualizarOportunidade(op.id, { responsavel: nome })
+    } catch (e) {
+      window.alert(`Não foi possível salvar o responsável: ${e.message}`)
+    }
     carregar()
   }
 
@@ -183,77 +375,31 @@ export default function Pipeline() {
         </span>
       )}
     </div>
-    <div className="kanban">
-      {ESTAGIOS.map((est) => (
-        <div key={est.id} className="coluna">
-          <h3>{est.rotulo} <span>{opsVisiveis.filter((o) => o.estagio === est.id).length}</span></h3>
-          {opsVisiveis.filter((o) => o.estagio === est.id).map((op) => {
-            const prazo = estadoPrazo(op)
-            const lic = op.licitacao
-            const analise = lic?.analise
-            const visual = CLASSIFICACAO_VISUAL[analise?.classificacao_final]
-            const titulo = [
-              lic?.orgao || 'Órgão não informado',
-              lic?.municipio ? `${lic.municipio}/${lic.uf}` : null,
-            ].filter(Boolean).join(' — ')
-            const identificada = dataBr(lic?.criado_em)
-            const vencimento = dataBr(lic?.data_encerramento)
-            return (
-            <div
-              key={op.id}
-              className={`cartao clicavel${prazo ? ` ${prazo}` : ''}`}
-              title="Clique para ver os detalhes da licitação"
-              onClick={() => lic && setDetalheLic(lic)}
-            >
-              <div className="cartao-topo">
-                <strong className="cartao-titulo" title={titulo}>{titulo}</strong>
-                {lic?.suspensa && <span className="selo-suspensa">Suspensa</span>}
-                {prazo === 'prazo-vencida' && <span className="selo-vencida">Vencida</span>}
-              </div>
-              <p className="cartao-resumo">{analise?.objeto_resumido || lic?.objeto}</p>
-              <div className="cartao-ia">
-                {visual ? (
-                  <>
-                    <span className={`veredito ${visual.tom}`} title={analise.classificacao_final}>
-                      {visual.rotulo}
-                    </span>
-                    {analise.score_beneficios != null && analise.score_pagamentos != null && (
-                      <small className="cartao-scores">
-                        B {analise.score_beneficios} · P {analise.score_pagamentos}
-                      </small>
-                    )}
-                  </>
-                ) : (
-                  <span className="veredito cinza">aguardando análise</span>
-                )}
-              </div>
-              <small className="cartao-meta">
-                {brlCompacto(lic?.valor_estimado) && (
-                  <span className="cartao-valor">{brlCompacto(lic.valor_estimado)}</span>
-                )}
-                {identificada && (
-                  <span title={`Identificada em ${identificada}`}>Ident. {identificada}</span>
-                )}
-                {vencimento && (
-                  <span className="cartao-venc" title={`Vence em ${vencimento}`}>Vence {vencimento}</span>
-                )}
-              </small>
-              <div className="acoes" onClick={(e) => e.stopPropagation()}>
-                <button title="Voltar estágio" aria-label="Voltar estágio" onClick={() => mover(op, -1)}>←</button>
-                {lic && (
-                  <button onClick={() => setDocsLic(lic)}>docs</button>
-                )}
-                {lic?.link && (
-                  <a href={lic.link} target="_blank" rel="noreferrer">edital ↗</a>
-                )}
-                <button title="Avançar estágio" aria-label="Avançar estágio" onClick={() => mover(op, 1)}>→</button>
-              </div>
-            </div>
-            )
-          })}
-        </div>
-      ))}
-    </div>
+    <datalist id="resp-sugestoes">
+      {responsaveis.map((r) => <option key={r} value={r} />)}
+    </datalist>
+    <DndContext sensors={sensores} onDragEnd={aoTerminarArraste}>
+      <div className="kanban">
+        {ESTAGIOS.map((est) => {
+          const doEstagio = opsVisiveis.filter((o) => o.estagio === est.id)
+          return (
+            <Coluna key={est.id} estagio={est.id} rotulo={est.rotulo} contagem={doEstagio.length}>
+              {doEstagio.map((op) => (
+                <Cartao
+                  key={op.id}
+                  op={op}
+                  aoAbrir={setDetalheLic}
+                  aoAbrirDocs={setDocsLic}
+                  aoMover={mover}
+                  aoSalvarResponsavel={salvarResponsavel}
+                  foiArraste={() => Date.now() - fimArraste.current < 300}
+                />
+              ))}
+            </Coluna>
+          )
+        })}
+      </div>
+    </DndContext>
     </>
   )
 }

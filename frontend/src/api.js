@@ -68,6 +68,8 @@ export const api = {
     return { blob: await r.blob(), nome, origem: r.headers.get('X-Texto-Origem') || '' }
   },
   oportunidades: () => req('/api/oportunidades'),
+  atualizarOportunidade: (id, patch) =>
+    req(`/api/oportunidades/${id}`, { ...post(patch), method: 'PATCH' }),
   moverOportunidade: (id, estagio) =>
     req(`/api/oportunidades/${id}`, { ...post({ estagio }), method: 'PATCH' }),
   perfil: () => req('/api/perfil'),

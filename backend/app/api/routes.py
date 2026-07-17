@@ -839,6 +839,24 @@ def _analise_out(a: Analise | None):
     }
 
 
+def _docs_progresso(l: Licitacao, db: Session, analise: Analise | None):
+    """Progresso da documentação para o cartão do kanban: quantos itens do
+    checklist da IA já têm anexo (casados pelo texto, como em listar_documentos)
+    + anexos avulsos fora do checklist."""
+    checklist = (analise.documentos_habilitacao if analise else None) or []
+    chaves = [
+        (chave or "").strip()
+        for chave in db.execute(
+            select(DocumentoAnexo.item_checklist).where(DocumentoAnexo.licitacao_id == l.id)
+        ).scalars().all()
+    ]
+    itens = [(item.get("documento") or "").strip() for item in checklist]
+    conjunto_chaves, conjunto_itens = set(chaves), set(itens)
+    anexados = sum(1 for texto in itens if texto and texto in conjunto_chaves)
+    avulsos = sum(1 for chave in chaves if not chave or chave not in conjunto_itens)
+    return {"itens": len(itens), "anexados": anexados, "avulsos": avulsos}
+
+
 def _licitacao_out(l: Licitacao, db: Session, incluir_raw: bool = False):
     analise = db.execute(select(Analise).where(Analise.licitacao_id == l.id)).scalar_one_or_none()
     out = {
@@ -848,6 +866,7 @@ def _licitacao_out(l: Licitacao, db: Session, incluir_raw: bool = False):
         "data_encerramento": l.data_encerramento, "link": l.link,
         "status_analise": l.status_analise, "suspensa": l.suspensa,
         "analise": _analise_out(analise),
+        "documentos": _docs_progresso(l, db, analise),
         # Data de identificação da licitação (quando entrou no sistema)
         "criado_em": l.criado_em.isoformat() if l.criado_em else None,
     }

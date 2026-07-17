@@ -49,7 +49,11 @@ em coluna: `font-variant-numeric: tabular-nums`.
 - **Inputs**: fundo branco, borda #CBD5E1, raio 12px; foco = borda azul + `--foco`.
   Labels em 0.83rem/500 slate-700 (sem uppercase).
 - **Kanban**: colunas `#F8FAFC` raio 16px; cartões brancos raio 12px, hover borda
-  azul-clara + sombra leve. Sem borda de acento à esquerda.
+  azul-clara + sombra leve. Faixa de 4px à esquerda na cor PLENA do matiz da
+  classificação da IA (`.faixa-verde/azul/amarelo/vermelho`, decisão 2026-07-17 —
+  única exceção à regra "cor plena só em bolinha/LED"). Cartões arrastáveis
+  (@dnd-kit): coluna de destino ganha fundo `--azul-suave`; chip do responsável
+  (iniciais, pílula azul-suave) no topo do cartão.
 - **Tabelas**: th com fundo `--panel-2`, texto slate-500 uppercase 0.68rem; linhas
   divididas por `--linha-suave`; hover `--panel-2`.
 - **Logomarca**: NUNCA alterar/recolorir o `prospera-logo.png`. Sobre fundo claro

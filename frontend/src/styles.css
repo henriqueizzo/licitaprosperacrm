@@ -385,6 +385,9 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
   font-variant-numeric: tabular-nums;
 }
 .cartao {
+  position: relative;      /* ancora a faixa de classificação e o z-index do arraste */
+  overflow: hidden;        /* recorta a faixa nos cantos arredondados */
+  touch-action: manipulation; /* rolagem normal no touch; segurar 250ms inicia o arraste */
   background: var(--panel);
   border: 1px solid var(--linha);
   border-radius: var(--raio-sm);
@@ -465,6 +468,90 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 .acoes { display: flex; justify-content: space-between; gap: 6px; margin-top: 10px; }
 .cartao .acoes { margin-top: 7px; }
 .cartao .acoes button, .cartao .acoes a { padding: 3px 8px; font-size: 0.7rem; }
+
+/* Faixa de classificação da IA na lateral esquerda do cartão (decisão 2026-07-17):
+   cor plena do matiz do veredito — escaneia a coluna sem ler badge por badge */
+.cartao[class*='faixa-']::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+}
+.cartao.faixa-verde::before { background: var(--verde); }
+.cartao.faixa-azul::before { background: var(--azul); }
+.cartao.faixa-amarelo::before { background: var(--amarelo); }
+.cartao.faixa-vermelho::before { background: var(--vermelho); }
+
+/* Drag & drop: cartão em movimento acima das colunas; coluna de destino realçada */
+.cartao.arrastando {
+  z-index: 40;
+  box-shadow: var(--sombra-md);
+  opacity: 0.95;
+  cursor: grabbing;
+}
+.coluna.solta-aqui { border-color: var(--azul-luz); background: var(--azul-suave); }
+
+/* Chip do responsável (iniciais) no topo do cartão */
+.resp-chip {
+  flex: none;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: var(--azul-suave);
+  color: var(--azul-texto);
+  border: 1px solid #bfdbfe;
+  font-size: 0.62rem;
+  font-weight: 700;
+  cursor: pointer;
+  user-select: none;
+}
+.resp-chip.vazio {
+  background: var(--panel-2);
+  color: var(--texto-mudo);
+  border: 1px dashed var(--linha);
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.resp-chip:hover { border-color: var(--azul-luz); color: var(--azul-texto); }
+
+/* Formulário inline de atribuição do responsável */
+.resp-form { display: flex; gap: 4px; margin-bottom: 6px; }
+.resp-form input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: var(--campo-fundo);
+  color: var(--texto);
+}
+.resp-form input:focus { outline: none; border-color: var(--azul); box-shadow: var(--foco); }
+.resp-form button {
+  font-family: var(--corpo);
+  font-size: 0.7rem;
+  font-weight: 500;
+  padding: 3px 8px;
+  border: 1px solid var(--linha);
+  background: #fff;
+  color: var(--texto-suave);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.resp-form button:hover { border-color: var(--azul-luz); color: var(--azul-texto); }
+
+/* Botão docs com checklist completo: todos os itens têm anexo */
+.cartao .acoes button.docs-completo {
+  color: var(--verde-texto);
+  border-color: var(--verde-borda);
+  background: var(--verde-fundo);
+}
 .acoes button, .acoes a {
   font-family: var(--corpo);
   font-size: 0.74rem;
