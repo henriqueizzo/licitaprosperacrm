@@ -17,6 +17,7 @@ const TIPOS = {
   cadastro_manual: 'Cadastro manual',
   coleta_manual: 'Coleta manual',
   reanalise: 'Reanálise IA',
+  importar_analise: 'Análise importada (PDF)',
   extracao_cadastro: 'Extração de cadastro',
 }
 

@@ -55,7 +55,7 @@ export default function Documentacao({ licitacao, aoFechar }) {
   const [erro, setErro] = useState('')
   const [msg, setMsg] = useState('')
   const [enviando, setEnviando] = useState(false)
-  const [reanalisando, setReanalisando] = useState(false)
+  const [importando, setImportando] = useState(false)
   const [itemAvulso, setItemAvulso] = useState('')
   const [gerandoWord, setGerandoWord] = useState('')
 
@@ -83,16 +83,24 @@ export default function Documentacao({ licitacao, aoFechar }) {
     }
   }
 
-  async function reanalisar() {
-    setReanalisando(true)
+  async function importarAnalise(e) {
+    const arquivo = e.target.files?.[0]
+    e.target.value = ''
+    if (!arquivo) return
+    setImportando(true)
     setMsg('')
     try {
-      await api.reanalisar(licitacao.id)
+      await api.importarAnalisePdf(licitacao.id, arquivo)
       await carregar()
-    } catch (e) {
-      setMsg(`Falha ao reanalisar: ${e.message}`)
+      setMsg('✅ Análise importada — checklist de documentação preenchido.')
+    } catch (err) {
+      setMsg(
+        err.message.includes('422')
+          ? '⚠ Este PDF não parece ser o relatório de análise do edital — anexe o PDF da nossa análise.'
+          : `Falha ao importar a análise: ${err.message}`
+      )
     } finally {
-      setReanalisando(false)
+      setImportando(false)
     }
   }
 
@@ -162,17 +170,20 @@ export default function Documentacao({ licitacao, aoFechar }) {
 
       {!dados.tem_checklist && (
         <div className="docs-aviso">
-          {reanalisando ? (
-            <>Reanalisando o edital com a IA — pode levar 1 a 2 minutos…</>
+          {importando ? (
+            <>Lendo o PDF da análise e montando o checklist — pode levar 1 a 2 minutos…</>
           ) : (
             <>
-              Esta licitação ainda não tem checklist de documentos. Reanalise-a para extrair o
-              checklist do edital. Enquanto isso, você pode anexar documentos avulsos abaixo.
+              Esta licitação ainda não tem checklist de documentos. Anexe o PDF do relatório de
+              análise do time para montar o checklist. Enquanto isso, você pode anexar documentos
+              avulsos abaixo.
             </>
           )}
-          <button type="button" className="primario" disabled={reanalisando} onClick={reanalisar}>
-            {reanalisando ? 'Reanalisando…' : 'Reanalisar agora'}
-          </button>
+          <label className="primario" style={{ cursor: importando ? 'wait' : 'pointer' }}>
+            {importando ? 'Importando…' : '📄 Anexar análise (PDF)'}
+            <input type="file" accept="application/pdf,.pdf" style={{ display: 'none' }}
+              disabled={importando} onChange={importarAnalise} />
+          </label>
         </div>
       )}
 

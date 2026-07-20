@@ -35,25 +35,45 @@ ESPERAS_5XX = [15, 45]
 MODELOS_FALLBACK = ["gemini-flash-lite-latest"]
 
 
+def _normalizar_pdfs(pdf_bytes: bytes | list[bytes] | None, teto: int) -> list[bytes]:
+    """Aceita PDF único ou lista; descarta o que estourar o teto conjunto do provedor."""
+    if not pdf_bytes:
+        return []
+    candidatos = pdf_bytes if isinstance(pdf_bytes, list) else [pdf_bytes]
+    pdfs: list[bytes] = []
+    total = 0
+    for pdf in candidatos:
+        if total + len(pdf) > teto:
+            logger.warning(
+                "PDF com %.1f MB excede o teto do provedor; analisando sem ele",
+                len(pdf) / 1024 / 1024,
+            )
+            continue
+        pdfs.append(pdf)
+        total += len(pdf)
+    return pdfs
+
+
 class AnalisadorEditalGemini:
     def __init__(self):
         self.client = genai.Client(api_key=settings.gemini_api_key)
 
-    def analisar(self, dados_licitacao: dict, perfil: dict, pdf_bytes: bytes | None = None):
-        """Analisa uma licitação. Retorna (ResultadoAnalise, UsoIA)."""
-        if pdf_bytes and len(pdf_bytes) > MAX_PDF_BYTES:
-            logger.warning(
-                "Edital com %.1f MB excede o limite inline do Gemini; analisando sem o PDF",
-                len(pdf_bytes) / 1024 / 1024,
-            )
-            pdf_bytes = None
+    def analisar(self, dados_licitacao: dict, perfil: dict, pdf_bytes: bytes | list[bytes] | None = None):
+        """Analisa uma licitação. Retorna (ResultadoAnalise, UsoIA).
 
-        contents: list = []
-        if pdf_bytes:
-            contents.append(genai_types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"))
-        contents.append(prompt_analise(perfil, dados_licitacao, tem_pdf=pdf_bytes is not None))
+        `pdf_bytes` aceita um PDF ou uma LISTA de PDFs (edital + termo de
+        referência + anexos) — os documentos de habilitação costumam estar nos
+        anexos, então a análise deve receber o conjunto completo.
+        """
+        pdfs = _normalizar_pdfs(pdf_bytes, MAX_PDF_BYTES)
 
-        response = self._gerar_com_retry(contents)
+        contents: list = [
+            genai_types.Part.from_bytes(data=pdf, mime_type="application/pdf") for pdf in pdfs
+        ]
+        contents.append(prompt_analise(perfil, dados_licitacao, tem_pdf=bool(pdfs)))
+
+        # max_tokens folgado: análise completa + checklist integral de documentos
+        response = self._gerar_com_retry(contents, max_tokens=32000)
 
         resultado: ResultadoAnalise | None = response.parsed
         if resultado is None:

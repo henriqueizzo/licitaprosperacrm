@@ -43,6 +43,12 @@ export const api = {
     fd.append('arquivo', arquivo)
     return req('/api/licitacoes/extrair-arquivo', { method: 'POST', body: fd })
   },
+  // Importa a análise em PDF (relatório do time) para um card existente
+  importarAnalisePdf: (licitacaoId, arquivo) => {
+    const fd = new FormData()
+    fd.append('arquivo', arquivo)
+    return req(`/api/licitacoes/${licitacaoId}/analise-arquivo`, { method: 'POST', body: fd })
+  },
   // Gera a declaração em Word e devolve { blob, nome, origem } ('ia' | 'modelo')
   gerarDeclaracao: async (licitacaoId, documento, referencia = '') => {
     const r = await fetch(`/api/licitacoes/${licitacaoId}/declaracoes`, {
@@ -76,7 +82,6 @@ export const api = {
   salvarPerfil: (perfil) => req('/api/perfil', { ...post(perfil), method: 'PUT' }),
   executarPipeline: () => req('/api/pipeline/executar', { method: 'POST' }),
   statusPipeline: () => req('/api/pipeline/status'),
-  reanalisar: (licitacaoId) => req(`/api/licitacoes/${licitacaoId}/reanalisar`, { method: 'POST' }),
   // Documentação (checklist de habilitação + anexos)
   documentos: (licitacaoId) => req(`/api/licitacoes/${licitacaoId}/documentos`),
   anexarDocumento: (licitacaoId, arquivo, itemChecklist = '') => {

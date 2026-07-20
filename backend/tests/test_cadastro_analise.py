@@ -144,7 +144,63 @@ def test_cadastro_com_analise_importada():
         ).scalar_one_or_none() is None
         db.close()
 
-        print("OK - cadastro com análise importada, sem análise e com análise inválida")
+        # --- importar análise por PDF em card existente (IA mockada) ---
+        from unittest.mock import patch
+
+        from app.analyzer.schemas import CamposLicitacao, ExtracaoCadastro, ResultadoAnalise
+
+        extracao_fake = ExtracaoCadastro(
+            campos=CamposLicitacao(
+                municipio="União Paulista", uf="SP", valor_estimado=818694.0,
+                data_encerramento="2026-07-17",
+            ),
+            analise=ResultadoAnalise.model_validate(ANALISE_IMPORTADA),
+        )
+
+        class AnalisadorFake:
+            def extrair(self, texto=None, pdf_bytes=None):
+                return extracao_fake
+
+        # Card automático sem análise e com campos faltando (como os do mural Sistema S)
+        r = cliente.post("/api/licitacoes", json={
+            "objeto": "Card automático sem análise", "numero_certame": "030/2026",
+        })
+        lic4_id = r.json()["id"]
+        db = TestingSession()
+        lic4 = db.get(Licitacao, lic4_id)
+        lic4.fonte = "fiesc"  # simula card de coleta automática
+        db.commit()
+        db.close()
+
+        with patch("app.analyzer.criar_analisador", return_value=AnalisadorFake()):
+            r = cliente.post(
+                f"/api/licitacoes/{lic4_id}/analise-arquivo",
+                files={"arquivo": ("analise.pdf", b"%PDF-1.4 conteudo", "application/pdf")},
+            )
+        assert r.status_code == 200, r.text
+        atualizada = r.json()
+        assert atualizada["analise"]["classificacao_final"] == "OPORTUNIDADE MODERADA"
+        assert len(atualizada["analise"]["documentos_habilitacao"]) == 3
+        # Campos vazios preenchidos pelo relatório; objeto original preservado
+        assert atualizada["municipio"] == "União Paulista" and atualizada["uf"] == "SP"
+        assert atualizada["valor_estimado"] == 818694.0
+        assert atualizada["objeto"] == "Card automático sem análise"
+
+        # PDF que não é relatório de análise -> 422 e nada é gravado
+        extracao_fake.analise = None
+        with patch("app.analyzer.criar_analisador", return_value=AnalisadorFake()):
+            r = cliente.post(
+                f"/api/licitacoes/{lic2_id}/analise-arquivo",
+                files={"arquivo": ("edital.pdf", b"%PDF-1.4 edital", "application/pdf")},
+            )
+        assert r.status_code == 422
+        db = TestingSession()
+        assert db.execute(
+            select(Analise).where(Analise.licitacao_id == lic2_id)
+        ).scalar_one_or_none() is None
+        db.close()
+
+        print("OK - cadastro com análise, sem análise, análise inválida e importação por PDF no card")
     finally:
         if override_anterior:
             app.dependency_overrides[get_db] = override_anterior

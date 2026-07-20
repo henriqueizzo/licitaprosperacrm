@@ -232,11 +232,11 @@ def criar_licitacao_manual(
     return out
 
 
-def _gravar_analise_importada(db: Session, lic: Licitacao, analise_bruta: dict) -> None:
-    """Grava a análise transcrita do relatório anexado no cadastro manual.
+def _gravar_analise_importada(db: Session, lic: Licitacao, analise_bruta: dict) -> bool:
+    """Grava uma análise transcrita de relatório anexado (cadastro manual ou card).
 
     Mesmo formato da análise do pipeline (ResultadoAnalise). Se o payload vier
-    inválido, o cadastro NÃO falha — só fica sem análise (log de aviso).
+    inválido, NÃO levanta — retorna False (quem chama decide se falha).
     """
     from ..analyzer.schemas import ResultadoAnalise
     from ..services.pipeline import _derivar_veredito
@@ -245,7 +245,7 @@ def _gravar_analise_importada(db: Session, lic: Licitacao, analise_bruta: dict) 
         resultado = ResultadoAnalise.model_validate(analise_bruta).normalizar()
     except Exception as exc:
         logger.warning("Análise importada inválida para a licitação %s: %s", lic.id, exc)
-        return
+        return False
 
     # Reaproveitamento de cadastro pela metade: descarta análise anterior
     for antiga in db.execute(select(Analise).where(Analise.licitacao_id == lic.id)).scalars():
@@ -277,6 +277,7 @@ def _gravar_analise_importada(db: Session, lic: Licitacao, analise_bruta: dict) 
     ))
     lic.status_analise = "analisada"
     db.commit()
+    return True
 
 
 # ---------- Preenchimento automático do Cadastro Manual ----------
@@ -367,6 +368,75 @@ async def extrair_campos_de_pdf(
     out["link"] = ""
     out["analise"] = extracao.analise.model_dump() if extracao.analise else None
     return out
+
+
+@router.post("/licitacoes/{licitacao_id}/analise-arquivo")
+async def importar_analise_de_pdf(
+    licitacao_id: int,
+    arquivo: UploadFile,
+    usuario: Usuario = Depends(usuario_atual),
+    db: Session = Depends(get_db),
+):
+    """Importa a análise de um relatório em PDF para uma licitação já cadastrada.
+
+    Substitui a reanálise IA nos cards: o operador anexa o relatório de análise
+    feito pelo time (mesmo formato do Cadastro Manual) e o card é atualizado —
+    classificação, scores, alertas e o checklist de documentação. Campos vazios
+    da licitação (valor, datas, município…) são preenchidos com o que o
+    relatório trouxer; campos já preenchidos NUNCA são sobrescritos.
+    """
+    from ..analyzer import ErroCotaIA, criar_analisador
+
+    lic = db.get(Licitacao, licitacao_id)
+    if not lic:
+        raise HTTPException(404, "Licitação não encontrada")
+
+    conteudo = await arquivo.read()
+    if not conteudo.startswith(b"%PDF"):
+        raise HTTPException(400, "Envie um arquivo PDF (o relatório de análise em .pdf).")
+    if len(conteudo) > MAX_PDF_EXTRACAO:
+        raise HTTPException(413, "PDF excede o tamanho máximo de 19 MB para leitura pela IA.")
+
+    try:
+        extracao = criar_analisador().extrair(pdf_bytes=conteudo)
+    except ErroCotaIA as exc:
+        raise HTTPException(503, f"IA indisponível no momento: {exc}")
+    except RuntimeError as exc:
+        raise HTTPException(503, str(exc))
+
+    if extracao.analise is None:
+        raise HTTPException(
+            422,
+            "Este PDF não parece ser um relatório de análise (não encontrei checklist de "
+            "documentos, scores e classificação). Anexe o PDF da nossa análise do edital.",
+        )
+
+    if not _gravar_analise_importada(db, lic, extracao.analise.model_dump()):
+        raise HTTPException(422, "Não consegui estruturar a análise deste PDF — tente novamente.")
+
+    # Complementa campos vazios da licitação com o que o relatório trouxer
+    c = extracao.campos
+    if not lic.orgao and c.orgao:
+        lic.orgao = c.orgao.strip()[:300]
+    if not lic.municipio and c.municipio:
+        lic.municipio = c.municipio.strip()[:120]
+    if not lic.uf and c.uf:
+        lic.uf = c.uf.strip().upper()[:2]
+    if not lic.modalidade and c.modalidade:
+        lic.modalidade = c.modalidade.strip()[:80]
+    if lic.valor_estimado is None and c.valor_estimado is not None:
+        lic.valor_estimado = c.valor_estimado
+    if not lic.data_abertura and c.data_abertura:
+        lic.data_abertura = c.data_abertura.strip()[:30]
+    if not lic.data_encerramento and c.data_encerramento:
+        lic.data_encerramento = c.data_encerramento.strip()[:30]
+    db.commit()
+
+    registrar_evento(
+        db, usuario, "importar_analise", licitacao_id=lic.id,
+        detalhe=f"pdf: {arquivo.filename or ''}"[:300],
+    )
+    return _licitacao_out(lic, db)
 
 
 def _baixar_conteudo(url: str) -> tuple[str | None, bytes | None]:

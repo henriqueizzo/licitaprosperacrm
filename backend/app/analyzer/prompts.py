@@ -268,8 +268,18 @@ preencher os campos estruturados abaixo. Regras de preenchimento:
   - documento: nome/descrição objetiva do documento exigido (sem o marcador "[ ]");
   - referencia_edital: item/cláusula/página do edital que exige o documento, ou
     "Não informado no edital".
-  Liste TODOS os documentos da tabela. Lista vazia somente se o edital não estiver disponível
-  e nenhuma exigência documental constar dos dados fornecidos.
+  ESTA LISTA É USADA COMO CHECKLIST OPERACIONAL DE ENVIO — se um documento faltar aqui,
+  o time NÃO o envia e a empresa é INABILITADA. Seja EXAUSTIVO:
+  - Varra a seção de habilitação/credenciamento item por item (cada subitem "a.1", "b.2", …
+    vira um item da lista; NUNCA resuma vários documentos em um item só).
+  - Varra TAMBÉM o restante do edital E TODOS os documentos anexados (termo de referência,
+    minuta de contrato, anexos): declarações exigidas em anexos-modelo, garantias, propostas,
+    atestados, comprovações com prazo pós-credenciamento, termos de ciência de tribunal de
+    contas — tudo que a empresa precise apresentar em qualquer fase entra na lista.
+  - Releia a lista pronta e confira contra o edital: algum documento citado em qualquer
+    seção ficou de fora?
+  Lista vazia somente se o edital não estiver disponível e nenhuma exigência documental
+  constar dos dados fornecidos.
 - riscos: riscos e pontos de atenção decisivos.
 - justificativa: justificativa objetiva dos scores e da classificação final.
 
@@ -377,7 +387,11 @@ def prompt_analise(perfil: dict, dados_licitacao: dict, tem_pdf: bool) -> str:
         "",
     ]
     if tem_pdf:
-        partes.append("O edital completo está anexado como documento PDF. Analise o PDF em detalhe.")
+        partes.append(
+            "Os documentos da licitação estão anexados em PDF — podem ser vários "
+            "(edital, termo de referência, anexos, minuta de contrato). Analise TODOS "
+            "em detalhe; exigências de documentos costumam estar espalhadas entre eles."
+        )
     else:
         partes.append(
             "O edital completo NÃO está disponível — analise apenas com os dados acima, "

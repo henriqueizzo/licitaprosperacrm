@@ -41,7 +41,6 @@ export default function Licitacoes() {
   const [docsAberta, setDocsAberta] = useState(null)
   const [erro, setErro] = useState('')
   const [msg, setMsg] = useState('')
-  const [reanalisando, setReanalisando] = useState(null) // id da licitação em reanálise
   const [busca, setBusca] = useState('')
   const [ufFiltro, setUfFiltro] = useState('todas')
   const [classFiltro, setClassFiltro] = useState('todas')
@@ -50,20 +49,6 @@ export default function Licitacoes() {
 
   const carregar = () => api.licitacoes().then(setItens).catch((e) => setErro(e.message))
   useEffect(() => { carregar() }, [])
-
-  async function reanalisar(l) {
-    setReanalisando(l.id)
-    setMsg('Reanalisando com IA… isso pode levar um minuto.')
-    try {
-      const r = await api.reanalisar(l.id)
-      setMsg(r.erro ? `⚠ ${r.erro}` : '✅ Reanálise concluída.')
-      await carregar()
-    } catch (e) {
-      setMsg(`Erro na reanálise: ${e.message}`)
-    } finally {
-      setReanalisando(null)
-    }
-  }
 
   // Busca + filtros client-side, sem acento — mesmos filtros do kanban
   const termo = normalizar(busca.trim())
@@ -156,15 +141,6 @@ export default function Licitacoes() {
                     onClick={() => setDocsAberta(docsAberta === l.id ? null : l.id)}
                   >
                     Documentação
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-docs"
-                    disabled={reanalisando === l.id}
-                    onClick={() => reanalisar(l)}
-                    title="Refazer a análise IA desta licitação"
-                  >
-                    {reanalisando === l.id ? 'reanalisando…' : 'reanalisar'}
                   </button>
                 </span>
               </td>

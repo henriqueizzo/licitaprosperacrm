@@ -153,44 +153,76 @@ class PNCPCollector(BaseCollector):
             raw=item,
         )
 
+    # Teto conjunto dos PDFs enviados à IA (limite inline do Gemini ~20 MB)
+    MAX_BYTES_DOCUMENTOS = 19 * 1024 * 1024
+
     @staticmethod
-    def baixar_edital(edital_url: str) -> bytes | None:
-        """Baixa o primeiro arquivo (edital) da licitação no PNCP, com retry. Retorna bytes do PDF ou None."""
+    def baixar_documentos(edital_url: str) -> list[bytes]:
+        """Baixa TODOS os arquivos PDF da licitação no PNCP, com retry.
+
+        Os documentos de habilitação costumam estar no Termo de Referência e nos
+        anexos — arquivos separados do edital. Baixar só o primeiro arquivo fazia
+        a análise perder exigências inteiras; agora a IA recebe o conjunto
+        (edital primeiro), respeitando o teto de bytes do provedor.
+        """
         for tentativa, espera in enumerate([0] + TENTATIVAS_ESPERA):
             if espera:
                 time.sleep(espera)
-            resultado = PNCPCollector._tentar_baixar(edital_url)
+            resultado = PNCPCollector._tentar_baixar_todos(edital_url)
             if resultado is not None:
-                return resultado if resultado != b"" else None  # b"" = sem PDF (não adianta tentar de novo)
-        return None
+                return resultado
+        return []
 
     @staticmethod
-    def _tentar_baixar(edital_url: str) -> bytes | None:
-        """Uma tentativa de download. None = erro transitório (retry); b'' = sem PDF disponível."""
+    def baixar_edital(edital_url: str) -> bytes | None:
+        """Compatibilidade: retorna só o primeiro documento (edital), se houver."""
+        documentos = PNCPCollector.baixar_documentos(edital_url)
+        return documentos[0] if documentos else None
+
+    @staticmethod
+    def _tentar_baixar_todos(edital_url: str) -> list[bytes] | None:
+        """Uma tentativa de download. None = erro transitório (retry); [] = sem PDF disponível."""
         try:
             with httpx.Client(timeout=120, follow_redirects=True) as client:
                 resp = client.get(edital_url)
                 resp.raise_for_status()
                 arquivos = resp.json()
                 if not arquivos:
-                    return b""
-                # Prioriza arquivo cujo título mencione "edital"
+                    return []
+                # Edital primeiro; demais arquivos (TR, anexos) na sequência
                 arquivos = sorted(
                     arquivos,
                     key=lambda a: 0 if "edital" in (a.get("titulo") or "").lower() else 1,
                 )
-                doc_url = arquivos[0].get("url") or arquivos[0].get("uri")
-                if not doc_url:
-                    return b""
-                # Bug do PNCP: o URL vem com porta interna inválida (ex.: pncp.gov.br:57667)
-                # que não aceita conexão externa — remove a porta para usar a padrão (443).
-                doc_url = re.sub(r"^(https://[^/:]+):\d+", r"\1", doc_url)
-                doc = client.get(doc_url)
-                doc.raise_for_status()
-                if b"%PDF" not in doc.content[:1024]:
-                    logger.info("Arquivo do edital não é PDF, ignorando análise do documento")
-                    return b""
-                return doc.content
+                documentos: list[bytes] = []
+                total = 0
+                for arquivo in arquivos:
+                    doc_url = arquivo.get("url") or arquivo.get("uri")
+                    if not doc_url:
+                        continue
+                    # Bug do PNCP: o URL vem com porta interna inválida (ex.: pncp.gov.br:57667)
+                    # que não aceita conexão externa — remove a porta para usar a padrão (443).
+                    doc_url = re.sub(r"^(https://[^/:]+):\d+", r"\1", doc_url)
+                    try:
+                        doc = client.get(doc_url)
+                        doc.raise_for_status()
+                    except Exception as exc:
+                        # Falha em um anexo não derruba o conjunto — o edital pode ter vindo
+                        logger.warning("Falha ao baixar arquivo %s: %s", doc_url, exc)
+                        continue
+                    if b"%PDF" not in doc.content[:1024]:
+                        logger.info("Arquivo %r não é PDF, ignorado", arquivo.get("titulo") or doc_url)
+                        continue
+                    if total + len(doc.content) > PNCPCollector.MAX_BYTES_DOCUMENTOS:
+                        logger.warning(
+                            "Arquivo %r excede o teto de %d MB do conjunto; analisando sem ele",
+                            arquivo.get("titulo") or doc_url,
+                            PNCPCollector.MAX_BYTES_DOCUMENTOS // (1024 * 1024),
+                        )
+                        continue
+                    documentos.append(doc.content)
+                    total += len(doc.content)
+                return documentos
         except Exception as exc:
-            logger.warning("Falha ao baixar edital %s: %s", edital_url, exc)
+            logger.warning("Falha ao baixar documentos de %s: %s", edital_url, exc)
             return None

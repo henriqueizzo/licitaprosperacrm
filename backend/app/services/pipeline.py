@@ -161,7 +161,9 @@ def executar_analises(db: Session, limite: int = 10, licitacao_ids: list[int] | 
     for lic in pendentes:
         pdf = None
         if lic.fonte == "pncp" and lic.edital_url:
-            pdf = PNCPCollector.baixar_edital(lic.edital_url)
+            # TODOS os arquivos (edital + TR + anexos) — os documentos de
+            # habilitação costumam estar nos anexos, não no arquivo principal
+            pdf = PNCPCollector.baixar_documentos(lic.edital_url) or None
         elif lic.fonte == "manual" and lic.edital_url:
             pdf = _baixar_pdf_direto(lic.edital_url)
         try:

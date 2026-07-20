@@ -26,34 +26,52 @@ logger = logging.getLogger(__name__)
 MAX_PDF_BYTES = 30 * 1024 * 1024  # margem sob o limite de 32 MB da API
 
 
+def _normalizar_pdfs(pdf_bytes: bytes | list[bytes] | None, teto: int) -> list[bytes]:
+    """Aceita PDF único ou lista; descarta o que estourar o teto conjunto da API."""
+    if not pdf_bytes:
+        return []
+    candidatos = pdf_bytes if isinstance(pdf_bytes, list) else [pdf_bytes]
+    pdfs: list[bytes] = []
+    total = 0
+    for pdf in candidatos:
+        if total + len(pdf) > teto:
+            logger.warning(
+                "PDF com %.1f MB excede o teto da API; analisando sem ele",
+                len(pdf) / 1024 / 1024,
+            )
+            continue
+        pdfs.append(pdf)
+        total += len(pdf)
+    return pdfs
+
+
 class AnalisadorEdital:
     def __init__(self):
         self.client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-    def analisar(self, dados_licitacao: dict, perfil: dict, pdf_bytes: bytes | None = None):
-        """Analisa uma licitação. Retorna (ResultadoAnalise, usage)."""
-        content: list[dict] = []
+    def analisar(self, dados_licitacao: dict, perfil: dict, pdf_bytes: bytes | list[bytes] | None = None):
+        """Analisa uma licitação. Retorna (ResultadoAnalise, usage).
 
-        if pdf_bytes and len(pdf_bytes) > MAX_PDF_BYTES:
-            logger.warning(
-                "Edital com %.1f MB excede o limite da API; analisando sem o PDF",
-                len(pdf_bytes) / 1024 / 1024,
-            )
-            pdf_bytes = None
+        `pdf_bytes` aceita um PDF ou uma LISTA de PDFs (edital + termo de
+        referência + anexos) — os documentos de habilitação costumam estar nos
+        anexos, então a análise deve receber o conjunto completo.
+        """
+        pdfs = _normalizar_pdfs(pdf_bytes, MAX_PDF_BYTES)
 
-        if pdf_bytes:
-            content.append({
+        content: list[dict] = [
+            {
                 "type": "document",
                 "source": {
                     "type": "base64",
                     "media_type": "application/pdf",
-                    "data": base64.standard_b64encode(pdf_bytes).decode(),
+                    "data": base64.standard_b64encode(pdf).decode(),
                 },
-            })
-
+            }
+            for pdf in pdfs
+        ]
         content.append({
             "type": "text",
-            "text": prompt_analise(perfil, dados_licitacao, tem_pdf=pdf_bytes is not None),
+            "text": prompt_analise(perfil, dados_licitacao, tem_pdf=bool(pdfs)),
         })
 
         try:

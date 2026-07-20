@@ -152,7 +152,8 @@ nav button.ativo {
 nav button.ativo:hover { color: var(--texto); }
 
 /* ---------- Botões ---------- */
-button.primario {
+button.primario,
+label.primario {
   font-family: var(--display);
   font-weight: 600;
   font-size: 0.875rem;
@@ -164,8 +165,10 @@ button.primario {
   cursor: pointer;
   box-shadow: var(--sombra);
   transition: filter 0.15s ease, transform 0.05s ease;
+  display: inline-block;
 }
-button.primario:hover:not(:disabled) { filter: brightness(1.1); }
+button.primario:hover:not(:disabled),
+label.primario:hover { filter: brightness(1.1); }
 button.primario:active:not(:disabled) { transform: translateY(1px); }
 button.primario:focus-visible { outline: none; box-shadow: var(--foco); }
 button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }

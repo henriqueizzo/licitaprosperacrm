@@ -1,7 +1,8 @@
-// Detalhes completos de uma licitação + análise da IA, com ações do time:
-// suspender/reativar o certame, editar campos (vencimento etc.) e reanalisar.
+// Detalhes completos de uma licitação + análise, com ações do time:
+// suspender/reativar o certame, editar campos (vencimento etc.) e anexar a
+// análise em PDF (relatório do time) que atualiza o card e o checklist de docs.
 // Usado no modal do kanban (clique no card) e na linha expandida da aba Licitações.
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { api } from '../api.js'
 
 const brl = (v) =>
@@ -23,14 +24,15 @@ const CORES_CLASSIFICACAO = {
 
 const FONTES = { pncp: 'PNCP', fiesc: 'FIESC', fiergs: 'FIERGS', fiems: 'FIEMS', manual: 'Cadastro manual' }
 
-// aoMudar: callback do pai para recarregar a lista após editar/suspender/reanalisar.
+// aoMudar: callback do pai para recarregar a lista após editar/suspender/importar análise.
 // aoFechar: fecha o modal/linha após excluir (opcional).
 export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
   const [l, setL] = useState(licitacao)
   const [editando, setEditando] = useState(false)
   const [salvando, setSalvando] = useState(false)
-  const [reanalisando, setReanalisando] = useState(false)
+  const [importando, setImportando] = useState(false)
   const [msg, setMsg] = useState('')
+  const inputAnalise = useRef(null)
   const [form, setForm] = useState({
     data_encerramento: (licitacao.data_encerramento || '').slice(0, 10),
     data_abertura: (licitacao.data_abertura || '').slice(0, 10),
@@ -47,7 +49,7 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
       setL(nova)
       setMsg(nova.suspensa
         ? '⏸ Marcada como suspensa — o alerta de prazo fica silenciado até reativar.'
-        : '▶ Reativada. Confira o vencimento (edite se o edital mudou) e reanalise.')
+        : '▶ Reativada. Confira o vencimento (edite se o edital mudou) e, se houver análise nova, anexe o PDF.')
       aoMudar?.()
     } catch (e) {
       setMsg(`Erro: ${e.message}`)
@@ -68,7 +70,7 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
       })
       setL(nova)
       setEditando(false)
-      setMsg('✅ Campos atualizados. Se o edital mudou, vale reanalisar.')
+      setMsg('✅ Campos atualizados. Se o edital mudou, anexe a análise nova em PDF.')
       aoMudar?.()
     } catch (e) {
       setMsg(`Erro ao salvar: ${e.message}`)
@@ -77,17 +79,30 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
     }
   }
 
-  async function reanalisar() {
-    setReanalisando(true)
-    setMsg('🔎 Reanalisando com a IA — pode levar 1 a 2 minutos…')
+  async function importarAnalise(e) {
+    const arquivo = e.target.files?.[0]
+    e.target.value = '' // permite reanexar o mesmo arquivo depois
+    if (!arquivo) return
+    setImportando(true)
+    setMsg('📄 Lendo o PDF da análise e atualizando o card… pode levar 1 a 2 minutos.')
     try {
-      const r = await api.reanalisar(l.id)
-      setMsg(r.erro ? `⚠ ${r.erro}` : '✅ Reanálise concluída — recarregue os detalhes para ver o resultado novo.')
+      const nova = await api.importarAnalisePdf(l.id, arquivo)
+      setL(nova)
+      const nDocs = nova.analise?.documentos_habilitacao?.length || 0
+      setMsg(
+        `✅ Análise importada (${nova.analise?.classificacao_final || 'sem classificação'}` +
+        (nDocs ? `, ${nDocs} documentos no checklist` : '') +
+        ') — card atualizado.'
+      )
       aoMudar?.()
-    } catch (e) {
-      setMsg(`Erro na reanálise: ${e.message}`)
+    } catch (err) {
+      setMsg(
+        err.message.includes('422')
+          ? '⚠ Este PDF não parece ser o relatório de análise do edital — anexe o PDF da nossa análise.'
+          : `Erro ao importar a análise: ${err.message}`
+      )
     } finally {
-      setReanalisando(false)
+      setImportando(false)
     }
   }
 
@@ -110,7 +125,7 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
     }
   }
 
-  const ocupado = salvando || reanalisando
+  const ocupado = salvando || importando
   return (
     <div className="detalhes-lic">
       <div className="detalhes-cabecalho">
@@ -139,10 +154,12 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
         <button type="button" disabled={ocupado} onClick={() => setEditando(!editando)}>
           ✏️ {editando ? 'Cancelar edição' : 'Editar campos'}
         </button>
-        <button type="button" disabled={ocupado} onClick={reanalisar}
-          title="Refazer a análise IA (use após o edital mudar)">
-          {reanalisando ? '⏳ Reanalisando…' : '🔁 Reanalisar'}
+        <button type="button" disabled={ocupado} onClick={() => inputAnalise.current?.click()}
+          title="Anexe o PDF do relatório de análise do time — atualiza classificação, scores e o checklist de documentação">
+          {importando ? '⏳ Importando…' : '📄 Anexar análise (PDF)'}
         </button>
+        <input ref={inputAnalise} type="file" accept="application/pdf,.pdf"
+          style={{ display: 'none' }} onChange={importarAnalise} />
         <button type="button" className="btn-excluir" disabled={ocupado} onClick={excluir}
           title="Exclui a licitação, o card, a análise e os documentos — sem desfazer">
           🗑 Excluir
@@ -220,9 +237,8 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
         </>
       ) : (
         <p className="pendente">
-          {l.status_analise === 'manual'
-            ? 'Cadastro manual — sem análise IA (use "reanalisar" na aba Licitações se quiser uma).'
-            : 'Ainda sem análise da IA.'}
+          Ainda sem análise — anexe o PDF do relatório de análise pelo botão acima
+          para preencher o card e o checklist de documentação.
         </p>
       )}
 
