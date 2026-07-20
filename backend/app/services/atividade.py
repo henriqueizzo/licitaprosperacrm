@@ -20,6 +20,11 @@ logger = logging.getLogger(__name__)
 GAP_MAX_MINUTOS = 30
 MINUTOS_EVENTO_ISOLADO = 1.0
 
+# Eventos são gravados em UTC; o dia de trabalho é contado no fuso do Brasil.
+# Offset fixo -3h: o país não adota horário de verão desde 2019 (evita depender
+# de tzdata instalado no host).
+FUSO_BRASIL = timedelta(hours=-3)
+
 
 def registrar_evento(
     db: Session,
@@ -60,11 +65,29 @@ def _tempo_uso_minutos(momentos: list[datetime]) -> int:
     return max(int(round(total)), 1)
 
 
+def _uso_por_dia(momentos: list[datetime]) -> list[dict]:
+    """Tempo de uso estimado por dia (fuso do Brasil), mais recente primeiro.
+
+    Mesma heurística do total (_tempo_uso_minutos), aplicada aos eventos de cada
+    dia. Só retorna dias com atividade:
+    [{dia: 'YYYY-MM-DD', minutos: int, eventos: int}].
+    """
+    por_dia: dict[str, list[datetime]] = {}
+    for momento in momentos:
+        dia = (momento + FUSO_BRASIL).date().isoformat()
+        por_dia.setdefault(dia, []).append(momento)
+    return [
+        {"dia": dia, "minutos": _tempo_uso_minutos(do_dia), "eventos": len(do_dia)}
+        for dia, do_dia in sorted(por_dia.items(), reverse=True)
+    ]
+
+
 def resumo_atividade(db: Session, dias: int) -> list[dict]:
     """Resumo por usuário nos últimos `dias` (formato consumido pelo dashboard).
 
     Cada item: usuario_id, nome, email, ativo, ultimo_acesso (ISO UTC com Z ou
     null), total_eventos, licitacoes_distintas, tempo_uso_minutos,
+    uso_por_dia ([{dia, minutos}], dia no fuso do Brasil, desc),
     eventos_por_tipo ({tipo: quantidade}). Ordenado por total_eventos desc.
     """
     corte = datetime.utcnow() - timedelta(days=dias)
@@ -97,6 +120,7 @@ def resumo_atividade(db: Session, dias: int) -> list[dict]:
             "total_eventos": len(evs),
             "licitacoes_distintas": len(licitacoes),
             "tempo_uso_minutos": _tempo_uso_minutos([ev.criado_em for ev in evs]),
+            "uso_por_dia": _uso_por_dia([ev.criado_em for ev in evs]),
             "eventos_por_tipo": por_tipo,
         })
     saida.sort(key=lambda r: r["total_eventos"], reverse=True)

@@ -1163,6 +1163,16 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 }
 .atividade-eventos strong { font-family: var(--display); color: var(--texto); font-size: 0.95rem; }
 .atividade-eventos .tabela { box-shadow: none; }
+.atividade-subtitulo {
+  font-family: var(--display);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--texto-suave);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-top: 10px;
+}
+.atividade-uso-dia { max-width: 520px; }
 
 /* ---------- Aba Dashboard (report executivo) ---------- */
 .dashboard { display: flex; flex-direction: column; gap: 16px; }

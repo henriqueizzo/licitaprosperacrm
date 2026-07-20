@@ -38,6 +38,15 @@ function dataHora(iso) {
   })
 }
 
+// 'YYYY-MM-DD' (dia já no fuso do Brasil) → 'seg, 20/07/26'
+function dataDia(dia) {
+  const [a, m, d] = dia.split('-')
+  const rotulo = new Date(Number(a), Number(m) - 1, Number(d)).toLocaleDateString('pt-BR', {
+    weekday: 'short', day: '2-digit', month: '2-digit', year: '2-digit',
+  })
+  return rotulo.replace('.', '')
+}
+
 export default function Atividade() {
   const [dias, setDias] = useState(30)
   const [usuarios, setUsuarios] = useState(null) // null = carregando
@@ -76,7 +85,8 @@ export default function Atividade() {
       <div className="atividade-topo">
         <span className="atividade-legenda">
           Uso do sistema por usuário — eventos registrados nas ações principais
-          (login, documentação, pipeline, cadastros). Clique num usuário para ver os eventos.
+          (login, documentação, pipeline, cadastros). Clique num usuário para ver
+          as horas de uso por dia e os eventos.
         </span>
         <div className="segmentado" role="tablist" aria-label="Período">
           {PERIODOS.map((p) => (
@@ -95,6 +105,7 @@ export default function Atividade() {
             <th>Último acesso</th>
             <th>Eventos</th>
             <th>Licitações acessadas</th>
+            <th>Dias ativos</th>
             <th>Tempo de uso (est.)</th>
             <th>Atividade por tipo</th>
           </tr>
@@ -112,6 +123,7 @@ export default function Atividade() {
               <td>{dataHora(u.ultimo_acesso)}</td>
               <td>{u.total_eventos}</td>
               <td>{u.licitacoes_distintas}</td>
+              <td>{u.uso_por_dia?.length || 0}</td>
               <td>{tempoUso(u.tempo_uso_minutos)}</td>
               <td>
                 <div className="atividade-tipos">
@@ -128,10 +140,10 @@ export default function Atividade() {
             </tr>
           ))}
           {usuarios === null && (
-            <tr><td colSpan={6} className="pendente">Carregando…</td></tr>
+            <tr><td colSpan={7} className="pendente">Carregando…</td></tr>
           )}
           {usuarios?.length === 0 && (
-            <tr><td colSpan={6} className="pendente">Nenhum usuário encontrado.</td></tr>
+            <tr><td colSpan={7} className="pendente">Nenhum usuário encontrado.</td></tr>
           )}
         </tbody>
       </table>
@@ -139,9 +151,34 @@ export default function Atividade() {
       {selecionado && (
         <div className="perfil atividade-eventos">
           <div className="atividade-topo">
-            <strong>Eventos de {selecionado.nome || selecionado.email} — últimos {dias} dias</strong>
+            <strong>Atividade de {selecionado.nome || selecionado.email} — últimos {dias} dias</strong>
             <button className="usuario-btn" onClick={() => setSelecionado(null)}>Fechar</button>
           </div>
+
+          <h4 className="atividade-subtitulo">Horas de uso por dia</h4>
+          <table className="tabela atividade-uso-dia">
+            <thead>
+              <tr>
+                <th>Dia</th>
+                <th>Tempo de uso (est.)</th>
+                <th>Eventos</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(selecionado.uso_por_dia || []).map((d) => (
+                <tr key={d.dia}>
+                  <td>{dataDia(d.dia)}</td>
+                  <td>{tempoUso(d.minutos)}</td>
+                  <td>{d.eventos}</td>
+                </tr>
+              ))}
+              {(selecionado.uso_por_dia || []).length === 0 && (
+                <tr><td colSpan={3} className="pendente">Sem uso registrado no período.</td></tr>
+              )}
+            </tbody>
+          </table>
+
+          <h4 className="atividade-subtitulo">Eventos</h4>
           <table className="tabela">
             <thead>
               <tr>
