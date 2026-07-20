@@ -227,6 +227,12 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
           {a.atestados_exigidos?.length > 0 && (
             <p><strong>Atestados:</strong> {a.atestados_exigidos.join(' • ')}</p>
           )}
+          {a.exigencias_habilitacao?.length > 0 && (
+            <p><strong>Exigências de habilitação:</strong> {a.exigencias_habilitacao.join(' • ')}</p>
+          )}
+          {a.exigencias_tecnicas?.length > 0 && (
+            <p><strong>Exigências técnicas:</strong> {a.exigencias_tecnicas.join(' • ')}</p>
+          )}
           {a.riscos?.length > 0 && <p><strong>⚠ Riscos:</strong> {a.riscos.join(' • ')}</p>}
           {a.analise_completa && (
             <details>

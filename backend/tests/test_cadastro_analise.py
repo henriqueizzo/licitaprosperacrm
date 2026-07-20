@@ -151,8 +151,12 @@ def test_cadastro_com_analise_importada():
 
         extracao_fake = ExtracaoCadastro(
             campos=CamposLicitacao(
+                objeto="Objeto vindo do relatório (não deve sobrescrever)",
                 municipio="União Paulista", uf="SP", valor_estimado=818694.0,
                 data_encerramento="2026-07-17",
+                link="https://www.bll.org.br",
+                responsavel="Kendrea Alves Papile Cavatao (Prefeita)",
+                observacoes="Envio exclusivamente pelo portal BLL.",
             ),
             analise=ResultadoAnalise.model_validate(ANALISE_IMPORTADA),
         )
@@ -185,6 +189,15 @@ def test_cadastro_com_analise_importada():
         assert atualizada["municipio"] == "União Paulista" and atualizada["uf"] == "SP"
         assert atualizada["valor_estimado"] == 818694.0
         assert atualizada["objeto"] == "Card automático sem análise"
+        assert atualizada["link"] == "https://www.bll.org.br"
+        # Contato/observações do relatório viram notas do card (estavam vazias)
+        db = TestingSession()
+        from app.models import Oportunidade
+        oport = db.execute(
+            select(Oportunidade).where(Oportunidade.licitacao_id == lic4_id)
+        ).scalars().first()
+        assert "Kendrea" in oport.notas and "BLL" in oport.notas
+        db.close()
 
         # PDF que não é relatório de análise -> 422 e nada é gravado
         extracao_fake.analise = None

@@ -98,12 +98,13 @@ class AnalisadorEditalGemini:
         if pdf_bytes:
             contents.append(genai_types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"))
         contents.append(prompt_extracao(texto, tem_pdf=pdf_bytes is not None))
-        # max_tokens alto: a transcrição integral de um relatório de análise é longa.
+        # max_tokens alto: a transcrição integral de um relatório de análise é longa
+        # e o "thinking" do Gemini também consome o orçamento — 16k truncava o JSON.
         # Retries CURTOS: chamada interativa atrás do proxy do Render, que corta a
         # requisição em ~100s — retry longo estoura o proxy, o usuário clica de novo
         # e a execução dobrada grava dados duplicados.
         response = self._gerar_com_retry(
-            contents, system=SYSTEM_EXTRACAO, schema=ExtracaoCadastro, max_tokens=16000,
+            contents, system=SYSTEM_EXTRACAO, schema=ExtracaoCadastro, max_tokens=32000,
             esperas_429=[8], esperas_5xx=[8],
         )
         extracao = response.parsed
@@ -134,6 +135,7 @@ class AnalisadorEditalGemini:
         esperas_5xx = ESPERAS_5XX if esperas_5xx is None else esperas_5xx
         modelos = [settings.gemini_model] + [m for m in MODELOS_FALLBACK if m != settings.gemini_model]
         ultima_5xx: Exception | None = None
+        cota_esgotada: Exception | None = None
         for modelo in modelos:
             rate_limits = 0
             tentativas_5xx = 0
@@ -148,10 +150,12 @@ class AnalisadorEditalGemini:
                             logger.warning("Gemini rate limit (429), aguardando %ds", espera)
                             time.sleep(espera)
                             continue
-                        raise ErroCotaIA(
-                            "Cota do Gemini esgotada (429 persistente — provável limite diário do "
-                            "nível gratuito). As análises continuam no próximo ciclo."
-                        ) from exc
+                        # Cota do modelo esgotada (provável limite DIÁRIO do nível
+                        # gratuito) — cada modelo tem cota própria: tenta o próximo
+                        # da lista antes de desistir do lote.
+                        logger.warning("Gemini %s com cota esgotada; tentando próximo modelo", modelo)
+                        cota_esgotada = exc
+                        break
                     if exc.code in (401, 403):
                         raise ErroCotaIA(f"Chave do Gemini inválida ou sem permissão ({exc.code}).") from exc
                     if exc.code and exc.code >= 500:
@@ -166,6 +170,11 @@ class AnalisadorEditalGemini:
                         ultima_5xx = exc
                         break  # próximo modelo da lista
                     raise
+        if cota_esgotada is not None:
+            raise ErroCotaIA(
+                "Cota do Gemini esgotada (429 persistente — provável limite diário do "
+                "nível gratuito). As análises continuam no próximo ciclo."
+            ) from cota_esgotada
         raise ultima_5xx  # todos os modelos indisponíveis (transitório — próximo ciclo resolve)
 
     def _gerar(self, modelo: str, contents: list, system: str, schema, max_tokens: int):

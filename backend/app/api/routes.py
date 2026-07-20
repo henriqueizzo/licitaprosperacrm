@@ -336,7 +336,7 @@ def extrair_campos_licitacao(
     registrar_evento(db, usuario, "extracao_cadastro", detalhe=(url or "texto colado")[:300])
 
     out = extracao.campos.model_dump()
-    out["link"] = url
+    out["link"] = url or extracao.campos.link
     out["analise"] = extracao.analise.model_dump() if extracao.analise else None
     return out
 
@@ -372,7 +372,6 @@ async def extrair_campos_de_pdf(
 
     registrar_evento(db, usuario, "extracao_cadastro", detalhe=f"pdf: {arquivo.filename or ''}"[:300])
     out = extracao.campos.model_dump()
-    out["link"] = ""
     out["analise"] = extracao.analise.model_dump() if extracao.analise else None
     return out
 
@@ -422,7 +421,10 @@ async def importar_analise_de_pdf(
         raise HTTPException(422, "Não consegui estruturar a análise deste PDF — tente novamente.")
 
     # Complementa campos vazios da licitação com o que o relatório trouxer
+    # (nunca sobrescreve o que já está preenchido)
     c = extracao.campos
+    if not lic.objeto and c.objeto:
+        lic.objeto = c.objeto.strip()
     if not lic.orgao and c.orgao:
         lic.orgao = c.orgao.strip()[:300]
     if not lic.municipio and c.municipio:
@@ -437,6 +439,21 @@ async def importar_analise_de_pdf(
         lic.data_abertura = c.data_abertura.strip()[:30]
     if not lic.data_encerramento and c.data_encerramento:
         lic.data_encerramento = c.data_encerramento.strip()[:30]
+    if not lic.link and c.link:
+        lic.link = c.link.strip()
+
+    # Contato/forma de envio do relatório vão para as notas do card, se vazias
+    if c.observacoes or c.responsavel:
+        oportunidade = db.execute(
+            select(Oportunidade).where(Oportunidade.licitacao_id == lic.id)
+        ).scalars().first()
+        if oportunidade and not (oportunidade.notas or "").strip():
+            notas = []
+            if c.responsavel:
+                notas.append(f"Responsável pelo certame: {c.responsavel.strip()}")
+            if c.observacoes:
+                notas.append(c.observacoes.strip())
+            oportunidade.notas = "\n".join(notas)
     db.commit()
 
     registrar_evento(

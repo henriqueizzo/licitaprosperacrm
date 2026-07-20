@@ -320,8 +320,11 @@ REGRAS PARA `campos` (sempre preencher):
 - numero_certame: número/identificação do certame (ex.: "PE 45/2026", "06.2025").
 - responsavel: nome(s) do agente de contratação/pregoeiro/contato, com cargo se houver
   (em relatório de análise: Tabela 2 "Responsável pelo Certame").
-- observacoes: informações úteis que não couberam nos demais campos (portal/forma de
-  envio da documentação, e-mail de contato, exigências marcantes), em 1-3 frases.
+- link: URL do portal onde o certame corre / onde a documentação é enviada (em
+  relatório de análise: Tabela 3 "Portal/Site (URL)"). Complete com https:// se
+  vier só o domínio (ex.: www.bll.org.br -> https://www.bll.org.br). Vazio se não constar.
+- observacoes: informações úteis que não couberam nos demais campos (forma de envio
+  da documentação, e-mail/telefone de contato, exigências marcantes), em 1-3 frases.
 
 REGRAS PARA `analise`:
 - Preencha SOMENTE se o documento for um relatório de análise (ou contiver uma análise
