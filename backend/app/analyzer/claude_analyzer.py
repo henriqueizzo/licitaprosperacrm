@@ -17,6 +17,7 @@ from .schemas import (  # noqa: F401 (reexport legado)
     CLASSIFICACOES,
     CamposLicitacao,
     ErroCotaIA,
+    ExtracaoCadastro,
     ResultadoAnalise,
 )
 
@@ -71,8 +72,13 @@ class AnalisadorEdital:
         resultado: ResultadoAnalise = response.parsed_output
         return resultado.normalizar(), response.usage
 
-    def extrair(self, texto: str | None = None, pdf_bytes: bytes | None = None) -> CamposLicitacao:
-        """Extrai campos cadastrais de um resumo/texto ou PDF (preenchimento automático)."""
+    def extrair(self, texto: str | None = None, pdf_bytes: bytes | None = None) -> ExtracaoCadastro:
+        """Extrai campos cadastrais de um resumo/texto ou PDF (preenchimento automático).
+
+        Se o documento for um relatório de análise do time (não o edital), a IA
+        também transcreve a análise estruturada em `analise` — o cadastro manual
+        grava essa análise e o checklist de documentação passa a funcionar.
+        """
         if pdf_bytes and len(pdf_bytes) > MAX_PDF_BYTES:
             pdf_bytes = None
         content: list[dict] = []
@@ -87,12 +93,13 @@ class AnalisadorEdital:
             })
         content.append({"type": "text", "text": prompt_extracao(texto, tem_pdf=pdf_bytes is not None)})
         try:
+            # max_tokens alto: a transcrição integral de um relatório de análise é longa
             response = self.client.messages.parse(
                 model=settings.claude_model,
-                max_tokens=4000,
+                max_tokens=16000,
                 system=SYSTEM_EXTRACAO,
                 messages=[{"role": "user", "content": content}],
-                output_format=CamposLicitacao,
+                output_format=ExtracaoCadastro,
             )
         except anthropic.BadRequestError as exc:
             if "credit balance" in str(exc.message).lower():
@@ -100,7 +107,10 @@ class AnalisadorEdital:
             raise
         except anthropic.RateLimitError as exc:
             raise ErroCotaIA("Rate limit da API Anthropic persistente.") from exc
-        return response.parsed_output
+        extracao: ExtracaoCadastro = response.parsed_output
+        if extracao.analise is not None:
+            extracao.analise.normalizar()
+        return extracao
 
     def redigir(self, instrucao: str, system: str) -> str:
         """Gera texto corrido (sem schema) — usado p/ redigir declarações e afins."""

@@ -124,3 +124,24 @@ class ResultadoAnalise(BaseModel):
         self.score_beneficios = max(0, min(10, self.score_beneficios))
         self.score_pagamentos = max(0, min(10, self.score_pagamentos))
         return self
+
+
+class ExtracaoCadastro(BaseModel):
+    """Saída do preenchimento automático do Cadastro Manual.
+
+    Além dos campos cadastrais, o documento anexado pode ser o RELATÓRIO DE
+    ANÁLISE que o time produz antes do cadastro (tabelas do certame + checklist
+    de documentos + scores). Nesse caso a IA transcreve a análise para o campo
+    `analise`, que o CRM grava como se fosse uma análise própria — habilitando o
+    checklist de Documentação sem reanalisar o edital.
+    """
+
+    campos: CamposLicitacao
+    analise: ResultadoAnalise | None = Field(
+        default=None,
+        description=(
+            "Análise estruturada transcrita do documento, SOMENTE quando o documento "
+            "anexado for um relatório de análise (com checklist de documentos, scores, "
+            "classificação). null quando for apenas um edital/aviso sem análise."
+        ),
+    )

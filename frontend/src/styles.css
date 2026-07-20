@@ -737,6 +737,19 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
 .auto-preencher button.primario { align-self: flex-start; }
 .auto-dica { font-size: 0.82rem; color: var(--texto-mudo); }
 
+/* Análise importada do PDF anexado (relatório pré-cadastro) */
+.analise-importada {
+  background: var(--azul-suave);
+  border: 1px solid #bfdbfe;
+  border-radius: var(--raio-sm);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.analise-importada strong { font-size: 0.88rem; color: var(--azul-texto); }
+.analise-importada p { font-size: 0.85rem; color: var(--texto); margin: 0; }
+
 /* ---------- Documentação (checklist + anexos) ---------- */
 .btn-docs {
   font-family: var(--corpo);

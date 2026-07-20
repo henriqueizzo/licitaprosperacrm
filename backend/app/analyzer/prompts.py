@@ -286,30 +286,67 @@ SYSTEM_ANALISTA = PROMPT_OFICIAL + INSTRUCOES_SAIDA_ESTRUTURADA
 
 SYSTEM_EXTRACAO = """\
 Você extrai dados cadastrais de licitações públicas brasileiras a partir de um texto
-(resumo, aviso, página de portal) ou de um edital em PDF.
+(resumo, aviso, página de portal), de um edital em PDF ou de um RELATÓRIO DE ANÁLISE
+DE EDITAL produzido pelo time da Prospera (documento que começa com "TABELAS DE DADOS
+DO CERTAME" e contém tabela de documentos para habilitação, scores e classificação).
 
-Regras:
+A saída tem duas partes: `campos` (cadastro) e `analise` (análise estruturada).
+
+REGRAS PARA `campos` (sempre preencher):
 - Preencha somente o que estiver explícito no conteúdo; NÃO invente nada.
 - Campos ausentes ficam vazios ("" ou null).
-- objeto: o objeto/título da licitação, completo mas sem repetições.
-- uf: sigla de 2 letras maiúsculas (ex.: SC).
+- objeto: o objeto/título da licitação, completo mas sem repetições. Em relatório de
+  análise, use o "Nome do Certame" ou o objeto do resumo executivo.
+- orgao / municipio / uf: em relatório de análise, vêm da Tabela 1 (Órgão/Prefeitura,
+  Cidade, Estado). uf: sigla de 2 letras maiúsculas (ex.: SC).
 - datas em formato ISO (YYYY-MM-DD). data_abertura = abertura/início das propostas;
-  data_encerramento = encerramento/limite das propostas ou do credenciamento.
+  data_encerramento = encerramento/limite das propostas ou do credenciamento (em
+  relatório de análise: "Data Máx. Credenciamento").
 - valor_estimado: número em reais, sem pontos de milhar (ex.: 940000.00). Se o texto
-  trouxer formato brasileiro ("R$ 940.000,00"), converta corretamente.
+  trouxer formato brasileiro ("R$ 940.000,00"), converta corretamente. Em relatório
+  de análise, use o "Valor Total Estimado" (ou o Valor Anual Estimado se for o único).
 - modalidade: ex.: Pregão Eletrônico, Concorrência, Dispensa de Licitação,
   Credenciamento, Inexigibilidade.
 - numero_certame: número/identificação do certame (ex.: "PE 45/2026", "06.2025").
-- responsavel: nome(s) do agente de contratação/pregoeiro/contato, com cargo se houver.
-- observacoes: informações úteis que não couberam nos demais campos (portal de envio,
-  e-mail de contato, exigências marcantes), em 1-3 frases.
+- responsavel: nome(s) do agente de contratação/pregoeiro/contato, com cargo se houver
+  (em relatório de análise: Tabela 2 "Responsável pelo Certame").
+- observacoes: informações úteis que não couberam nos demais campos (portal/forma de
+  envio da documentação, e-mail de contato, exigências marcantes), em 1-3 frases.
+
+REGRAS PARA `analise`:
+- Preencha SOMENTE se o documento for um relatório de análise (ou contiver uma análise
+  completa com checklist de documentos, scores e classificação). Caso contrário — edital
+  puro, aviso, resumo — deixe `analise` como null; NÃO analise o edital você mesmo.
+- TRANSCREVA fielmente o que o relatório diz; não refaça a análise nem acrescente
+  opinião própria. Se um campo não constar no relatório, use o valor neutro ("", lista
+  vazia) em vez de inventar.
+- documentos_habilitacao: TODOS os itens da "TABELA DE DOCUMENTOS PARA HABILITAÇÃO".
+  Se o relatório usar uma categoria fora das 5 permitidas (ex.: "REGISTRO NO PAT"),
+  classifique na categoria permitida mais próxima e mantenha o nome completo do
+  documento (ex.: Registro no PAT -> "OUTROS DOCUMENTOS / DECLARAÇÕES").
+- score_beneficios / score_pagamentos: do "SCORE FINAL" (0 a 10).
+- classificacao_final: exatamente uma das 5 classificações, conforme a
+  "CLASSIFICAÇÃO FINAL" do relatório (para a Prospera Benefícios, se houver uma por empresa).
+- credenciamento_viavel / credenciamento_analise: da "Análise Preliminar de
+  Credenciamento" (viável = true, inviável = false).
+- alertas_impugnacao: apenas os pontos em que o relatório recomenda ou sugere avaliar
+  impugnação/esclarecimento; lista vazia se o relatório disser que não há necessidade.
+- prazos, riscos, exigencias_habilitacao, exigencias_tecnicas, atestados_exigidos,
+  custo_emissao_cartoes, objeto_resumido, justificativa: extraia das seções
+  correspondentes do relatório.
+- analise_completa: transcrição integral do conteúdo do relatório em Markdown,
+  preservando as tabelas (como tabelas Markdown) e todas as seções na ordem original.
 """
 
 
 def prompt_extracao(texto: str | None, tem_pdf: bool) -> str:
-    partes = ["Extraia os campos cadastrais da licitação a partir do conteúdo abaixo."]
+    partes = [
+        "Extraia os campos cadastrais da licitação a partir do conteúdo abaixo. "
+        "Se o conteúdo for um relatório de análise de edital, transcreva também a "
+        "análise estruturada (campo `analise`); caso contrário deixe `analise` null."
+    ]
     if tem_pdf:
-        partes.append("O edital/documento está anexado como PDF — use-o como fonte principal.")
+        partes.append("O documento está anexado como PDF — use-o como fonte principal.")
     if texto:
         partes.append("\n--- CONTEÚDO ---\n" + texto)
     return "\n".join(partes)

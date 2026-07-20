@@ -166,6 +166,10 @@ class LicitacaoManualIn(BaseModel):
     responsavel: str = ""
     criar_oportunidade: bool = True
     analisar: bool = False
+    # Análise transcrita do relatório anexado no preenchimento automático
+    # (formato ResultadoAnalise). Quando presente, é gravada como análise da
+    # licitação — habilita o checklist de Documentação sem reanálise IA.
+    analise: dict | None = None
 
 
 @router.post("/licitacoes", status_code=201)
@@ -218,11 +222,61 @@ def criar_licitacao_manual(
     db.add(oportunidade)
     db.commit()
 
+    if dados.analise:
+        _gravar_analise_importada(db, lic, dados.analise)
+
     registrar_evento(db, usuario, "cadastro_manual", licitacao_id=lic.id, detalhe=lic.objeto[:200])
 
     out = _licitacao_out(lic, db)
     out["oportunidade_id"] = oportunidade.id
     return out
+
+
+def _gravar_analise_importada(db: Session, lic: Licitacao, analise_bruta: dict) -> None:
+    """Grava a análise transcrita do relatório anexado no cadastro manual.
+
+    Mesmo formato da análise do pipeline (ResultadoAnalise). Se o payload vier
+    inválido, o cadastro NÃO falha — só fica sem análise (log de aviso).
+    """
+    from ..analyzer.schemas import ResultadoAnalise
+    from ..services.pipeline import _derivar_veredito
+
+    try:
+        resultado = ResultadoAnalise.model_validate(analise_bruta).normalizar()
+    except Exception as exc:
+        logger.warning("Análise importada inválida para a licitação %s: %s", lic.id, exc)
+        return
+
+    # Reaproveitamento de cadastro pela metade: descarta análise anterior
+    for antiga in db.execute(select(Analise).where(Analise.licitacao_id == lic.id)).scalars():
+        db.delete(antiga)
+
+    maior_score = max(resultado.score_beneficios, resultado.score_pagamentos)
+    db.add(Analise(
+        licitacao_id=lic.id,
+        score=maior_score * 10,
+        veredito=_derivar_veredito(resultado),
+        justificativa=resultado.justificativa,
+        objeto_resumido=resultado.objeto_resumido,
+        prazos=[p.model_dump() for p in resultado.prazos],
+        exigencias_habilitacao=resultado.exigencias_habilitacao,
+        exigencias_tecnicas=resultado.exigencias_tecnicas,
+        atestados_exigidos=resultado.atestados_exigidos,
+        documentos_habilitacao=[d.model_dump() for d in resultado.documentos_habilitacao],
+        riscos=resultado.riscos,
+        score_beneficios=resultado.score_beneficios,
+        score_pagamentos=resultado.score_pagamentos,
+        classificacao_final=resultado.classificacao_final,
+        credenciamento_viavel=resultado.credenciamento_viavel,
+        credenciamento_analise=resultado.credenciamento_analise,
+        alertas_impugnacao=resultado.alertas_impugnacao,
+        custo_emissao_cartoes=resultado.custo_emissao_cartoes,
+        analise_completa=resultado.analise_completa,
+        tokens_entrada=0,
+        tokens_saida=0,
+    ))
+    lic.status_analise = "analisada"
+    db.commit()
 
 
 # ---------- Preenchimento automático do Cadastro Manual ----------
@@ -265,7 +319,7 @@ def extrair_campos_licitacao(
                 )
 
     try:
-        campos = criar_analisador().extrair(texto=texto or None, pdf_bytes=pdf)
+        extracao = criar_analisador().extrair(texto=texto or None, pdf_bytes=pdf)
     except ErroCotaIA as exc:
         raise HTTPException(503, f"IA indisponível no momento: {exc}")
     except RuntimeError as exc:
@@ -273,8 +327,9 @@ def extrair_campos_licitacao(
 
     registrar_evento(db, usuario, "extracao_cadastro", detalhe=(url or "texto colado")[:300])
 
-    out = campos.model_dump()
+    out = extracao.campos.model_dump()
     out["link"] = url
+    out["analise"] = extracao.analise.model_dump() if extracao.analise else None
     return out
 
 
@@ -301,15 +356,16 @@ async def extrair_campos_de_pdf(
         raise HTTPException(413, "PDF excede o tamanho máximo de 19 MB para leitura pela IA.")
 
     try:
-        campos = criar_analisador().extrair(pdf_bytes=conteudo)
+        extracao = criar_analisador().extrair(pdf_bytes=conteudo)
     except ErroCotaIA as exc:
         raise HTTPException(503, f"IA indisponível no momento: {exc}")
     except RuntimeError as exc:
         raise HTTPException(503, str(exc))
 
     registrar_evento(db, usuario, "extracao_cadastro", detalhe=f"pdf: {arquivo.filename or ''}"[:300])
-    out = campos.model_dump()
+    out = extracao.campos.model_dump()
     out["link"] = ""
+    out["analise"] = extracao.analise.model_dump() if extracao.analise else None
     return out
 
 

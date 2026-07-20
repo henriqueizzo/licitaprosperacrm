@@ -33,6 +33,7 @@ export default function CadastroManual() {
   const [resumo, setResumo] = useState('')
   const [linkAuto, setLinkAuto] = useState('')
   const [pdfAuto, setPdfAuto] = useState(null)
+  const [analiseExtraida, setAnaliseExtraida] = useState(null)
   const [extraindo, setExtraindo] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [msg, setMsg] = useState('')
@@ -69,7 +70,15 @@ export default function CadastroManual() {
         responsavel: c.responsavel || f.responsavel,
         observacoes: c.observacoes || f.observacoes,
       }))
-      setMsg('✅ Campos preenchidos — revise abaixo e clique em "Cadastrar licitação".')
+      setAnaliseExtraida(c.analise || null)
+      const nDocs = c.analise?.documentos_habilitacao?.length || 0
+      setMsg(
+        c.analise
+          ? `✅ Campos preenchidos + análise importada (${c.analise.classificacao_final || 'sem classificação'}` +
+            (nDocs ? `, ${nDocs} documentos de habilitação no checklist` : '') +
+            ') — revise abaixo e clique em "Cadastrar licitação".'
+          : '✅ Campos preenchidos — revise abaixo e clique em "Cadastrar licitação".'
+      )
     } catch (e) {
       setMsg(`⚠ Não consegui preencher automaticamente: ${e.message}`)
     } finally {
@@ -90,17 +99,23 @@ export default function CadastroManual() {
         uf: form.uf.trim().toUpperCase(),
         valor_estimado: form.valor_estimado === '' ? null : Number(form.valor_estimado),
         edital_url: form.link,
+        analise: analiseExtraida,
       })
       const identificada = dataBr(r.criado_em)
+      const nDocs = analiseExtraida?.documentos_habilitacao?.length || 0
       setMsg(
         `✅ Licitação cadastrada (nº ${r.id_externo})` +
         (identificada ? ` — identificada em ${identificada}` : '') +
-        ' — e adicionada ao Pipeline.'
+        ' — e adicionada ao Pipeline.' +
+        (nDocs
+          ? ` A análise foi importada com ${nDocs} documentos de habilitação — anexe-os pelo botão "docs" do cartão.`
+          : '')
       )
       setForm(FORM_VAZIO)
       setResumo('')
       setLinkAuto('')
       setPdfAuto(null)
+      setAnaliseExtraida(null)
     } catch (e) {
       setMsg(
         e.message.includes('409')
@@ -131,7 +146,8 @@ export default function CadastroManual() {
             placeholder="https://…" />
         </label>
         <label>
-          Ou anexe o PDF do edital (até 19 MB) — tem prioridade sobre o resumo/link
+          Ou anexe o PDF do edital ou da nossa análise do edital (até 19 MB) — tem prioridade sobre o resumo/link.
+          Se for a análise, o checklist de documentação e a classificação também são importados.
           <input
             type="file"
             accept="application/pdf,.pdf"
@@ -148,6 +164,25 @@ export default function CadastroManual() {
         <button className="primario" onClick={preencherAutomatico} disabled={extraindo || salvando}>
           {extraindo ? '⏳ Preenchendo…' : '✨ Preencher automaticamente'}
         </button>
+        {analiseExtraida && (
+          <div className="analise-importada">
+            <strong>📋 Análise importada do documento</strong>
+            <p>
+              {analiseExtraida.classificacao_final || 'Sem classificação'}
+              {' · '}Benefícios {analiseExtraida.score_beneficios}/10
+              {' · '}Pagamentos {analiseExtraida.score_pagamentos}/10
+              {analiseExtraida.documentos_habilitacao?.length
+                ? ` · ${analiseExtraida.documentos_habilitacao.length} documentos de habilitação no checklist`
+                : ''}
+            </p>
+            <p className="auto-dica">
+              Ao cadastrar, a análise entra no CRM como a das licitações públicas: classificação no
+              cartão, detalhes completos e checklist de documentação pronto para anexos.{' '}
+              <button type="button" className="doc-excluir" title="Descartar a análise importada"
+                onClick={() => setAnaliseExtraida(null)}>descartar</button>
+            </p>
+          </div>
+        )}
       </div>
 
       <div className="grade">
@@ -207,6 +242,7 @@ export default function CadastroManual() {
       </div>
       <p className="auto-dica">
         O registro manual entra direto como oportunidade no Pipeline, sem passar pela análise IA.
+        Se você anexou o PDF da nossa análise, ela é gravada junto — com checklist de documentação.
       </p>
       <button className="primario" onClick={salvar} disabled={salvando || extraindo}>
         {salvando ? '⏳ Cadastrando…' : 'Cadastrar licitação'}

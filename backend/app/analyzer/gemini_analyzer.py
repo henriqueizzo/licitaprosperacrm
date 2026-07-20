@@ -17,7 +17,7 @@ from google.genai import types as genai_types
 
 from ..config import settings
 from .prompts import SYSTEM_ANALISTA, SYSTEM_EXTRACAO, prompt_analise, prompt_extracao
-from .schemas import CamposLicitacao, ErroCotaIA, ResultadoAnalise, UsoIA
+from .schemas import ErroCotaIA, ExtracaoCadastro, ResultadoAnalise, UsoIA
 
 logger = logging.getLogger(__name__)
 
@@ -65,21 +65,29 @@ class AnalisadorEditalGemini:
         saida = ((uso.candidates_token_count or 0) + (uso.thoughts_token_count or 0)) if uso else 0
         return resultado.normalizar(), UsoIA(input_tokens=entrada, output_tokens=saida)
 
-    def extrair(self, texto: str | None = None, pdf_bytes: bytes | None = None) -> CamposLicitacao:
-        """Extrai campos cadastrais de um resumo/texto ou PDF (preenchimento automático)."""
+    def extrair(self, texto: str | None = None, pdf_bytes: bytes | None = None) -> ExtracaoCadastro:
+        """Extrai campos cadastrais de um resumo/texto ou PDF (preenchimento automático).
+
+        Se o documento for um relatório de análise do time (não o edital), a IA
+        também transcreve a análise estruturada em `analise` — o cadastro manual
+        grava essa análise e o checklist de documentação passa a funcionar.
+        """
         if pdf_bytes and len(pdf_bytes) > MAX_PDF_BYTES:
             pdf_bytes = None
         contents: list = []
         if pdf_bytes:
             contents.append(genai_types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"))
         contents.append(prompt_extracao(texto, tem_pdf=pdf_bytes is not None))
+        # max_tokens alto: a transcrição integral de um relatório de análise é longa
         response = self._gerar_com_retry(
-            contents, system=SYSTEM_EXTRACAO, schema=CamposLicitacao, max_tokens=4000
+            contents, system=SYSTEM_EXTRACAO, schema=ExtracaoCadastro, max_tokens=16000
         )
-        campos = response.parsed
-        if campos is None:
-            campos = CamposLicitacao.model_validate_json(response.text)
-        return campos
+        extracao = response.parsed
+        if extracao is None:
+            extracao = ExtracaoCadastro.model_validate_json(response.text)
+        if extracao.analise is not None:
+            extracao.analise.normalizar()
+        return extracao
 
     def redigir(self, instrucao: str, system: str) -> str:
         """Gera texto corrido (sem schema) — usado p/ redigir declarações e afins.
