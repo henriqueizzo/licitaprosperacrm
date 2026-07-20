@@ -123,6 +123,17 @@ def migrar_esquema() -> list[str]:
                 ))
                 if res.rowcount:
                     criadas.append(f"backfill_oportunidades({res.rowcount})")
+        # Análises duplicadas (ex.: duas importações concorrentes quando o proxy
+        # cortou a primeira requisição): mantém só a mais recente por licitação.
+        # A API tolera duplicata (first()), mas o banco deve ficar limpo.
+        if "analises" in tabelas:
+            res = conn.execute(text(
+                "DELETE FROM analises WHERE id NOT IN "
+                "(SELECT MAX(id) FROM analises GROUP BY licitacao_id)"
+            ))
+            if res.rowcount:
+                criadas.append(f"analises_duplicadas_removidas({res.rowcount})")
+
         # Preenche/conserta o cargo padrão do representante com parâmetro bound
         # (nunca em DDL — ver comentário em _migracoes). Só mexe quando o valor está
         # vazio ou contém U+FFFD (marca da corrupção); personalização do usuário fica.

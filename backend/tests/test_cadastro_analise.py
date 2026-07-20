@@ -200,7 +200,21 @@ def test_cadastro_com_analise_importada():
         ).scalar_one_or_none() is None
         db.close()
 
-        print("OK - cadastro com análise, sem análise, análise inválida e importação por PDF no card")
+        # --- análise DUPLICADA no banco não pode derrubar a listagem (500) ---
+        db = TestingSession()
+        db.add(Analise(licitacao_id=lic_id, veredito="participar",
+                       classificacao_final="BOA OPORTUNIDADE", score_beneficios=9))
+        db.commit()
+        db.close()
+        r = cliente.get("/api/licitacoes")
+        assert r.status_code == 200, r.text
+        dupla = next(item for item in r.json() if item["id"] == lic_id)
+        # Mostra a análise mais recente (a duplicata adicionada por último)
+        assert dupla["analise"]["classificacao_final"] == "BOA OPORTUNIDADE"
+        r = cliente.get(f"/api/licitacoes/{lic_id}/documentos")
+        assert r.status_code == 200
+
+        print("OK - cadastro com análise, sem análise, análise inválida, importação por PDF e duplicata")
     finally:
         if override_anterior:
             app.dependency_overrides[get_db] = override_anterior

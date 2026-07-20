@@ -27,11 +27,18 @@ cron_router = APIRouter(prefix="/api")
 
 @cron_router.get("/saude")
 def saude():
-    """Diagnóstico público mínimo (sem dados sensíveis): o processo está de pé e
-    qual provedor de IA está ativo — permite verificar de fora se as env vars
-    (ex.: GEMINI_API_KEY) chegaram ao processo após um deploy."""
+    """Diagnóstico público mínimo (sem dados sensíveis): o processo está de pé,
+    qual provedor de IA está ativo e qual commit está rodando (RENDER_GIT_COMMIT,
+    setado pelo Render) — permite confirmar de fora que um deploy backend-only
+    chegou ao processo."""
+    import os
+
     from ..analyzer import provedor_ativo
-    return {"ok": True, "ia_provider": provedor_ativo() or "nenhum"}
+    return {
+        "ok": True,
+        "ia_provider": provedor_ativo() or "nenhum",
+        "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:7],
+    }
 
 
 def _pipeline_em_background(dias: int, limite_analises: int) -> None:
@@ -608,7 +615,7 @@ def listar_documentos(
     # abertura da tela de documentação de uma licitação (não é polling)
     registrar_evento(db, usuario, "ver_documentos", licitacao_id=licitacao_id)
 
-    analise = db.execute(select(Analise).where(Analise.licitacao_id == licitacao_id)).scalar_one_or_none()
+    analise = _analise_da_licitacao(db, licitacao_id)
     checklist_ia = (analise.documentos_habilitacao if analise else None) or []
 
     anexos = db.execute(
@@ -983,8 +990,20 @@ def _docs_progresso(l: Licitacao, db: Session, analise: Analise | None):
     return {"itens": len(itens), "anexados": anexados, "avulsos": avulsos}
 
 
+def _analise_da_licitacao(db: Session, licitacao_id: int) -> Analise | None:
+    """Análise mais recente da licitação.
+
+    Usa first() em vez de scalar_one_or_none(): se uma duplicata escapar (ex.:
+    duas importações concorrentes), a listagem NÃO pode cair com 500 — mostra a
+    mais nova e o startup limpa o resto.
+    """
+    return db.execute(
+        select(Analise).where(Analise.licitacao_id == licitacao_id).order_by(Analise.id.desc())
+    ).scalars().first()
+
+
 def _licitacao_out(l: Licitacao, db: Session, incluir_raw: bool = False):
-    analise = db.execute(select(Analise).where(Analise.licitacao_id == l.id)).scalar_one_or_none()
+    analise = _analise_da_licitacao(db, l.id)
     out = {
         "id": l.id, "fonte": l.fonte, "id_externo": l.id_externo, "orgao": l.orgao,
         "municipio": l.municipio, "uf": l.uf, "modalidade": l.modalidade, "objeto": l.objeto,

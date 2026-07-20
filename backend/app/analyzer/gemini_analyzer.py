@@ -98,9 +98,13 @@ class AnalisadorEditalGemini:
         if pdf_bytes:
             contents.append(genai_types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"))
         contents.append(prompt_extracao(texto, tem_pdf=pdf_bytes is not None))
-        # max_tokens alto: a transcrição integral de um relatório de análise é longa
+        # max_tokens alto: a transcrição integral de um relatório de análise é longa.
+        # Retries CURTOS: chamada interativa atrás do proxy do Render, que corta a
+        # requisição em ~100s — retry longo estoura o proxy, o usuário clica de novo
+        # e a execução dobrada grava dados duplicados.
         response = self._gerar_com_retry(
-            contents, system=SYSTEM_EXTRACAO, schema=ExtracaoCadastro, max_tokens=16000
+            contents, system=SYSTEM_EXTRACAO, schema=ExtracaoCadastro, max_tokens=16000,
+            esperas_429=[8], esperas_5xx=[8],
         )
         extracao = response.parsed
         if extracao is None:
