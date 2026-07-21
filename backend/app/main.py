@@ -63,6 +63,30 @@ async def lifespan(app: FastAPI):
         dedupe = apagar_espelhos(db)
         if dedupe["apagadas"]:
             logger.info("Dedupe no startup: %d espelho(s) apagado(s)", dedupe["apagadas"])
+        # Backfill de sistema/endereço da licitação para cards antigos do PNCP:
+        # o raw_json guarda linkSistemaOrigem desde a coleta. Idempotente (só
+        # preenche onde está vazio).
+        from sqlalchemy import or_, select as sql_select
+
+        from .collectors.pncp import _nome_sistema
+        from .models import Licitacao as _Lic
+        pendentes_backfill = db.execute(
+            sql_select(_Lic).where(
+                _Lic.fonte == "pncp", _Lic.raw_json.isnot(None),
+                or_(_Lic.endereco_licitacao == "", _Lic.sistema == ""),
+            )
+        ).scalars().all()
+        preenchidas = 0
+        for lic in pendentes_backfill:
+            endereco = ((lic.raw_json or {}).get("linkSistemaOrigem") or "").strip()
+            if not lic.endereco_licitacao and endereco:
+                lic.endereco_licitacao = endereco
+            if not lic.sistema:
+                lic.sistema = _nome_sistema(lic.objeto, endereco)
+            preenchidas += 1
+        if preenchidas:
+            db.commit()
+            logger.info("Backfill sistema/endereço: %d licitação(ões) do PNCP", preenchidas)
     finally:
         db.close()
     scheduler = None

@@ -23,6 +23,36 @@ PUBLICACAO_URL = "https://pncp.gov.br/api/consulta/v1/contratacoes/publicacao"
 ARQUIVOS_URL = "https://pncp.gov.br/pncp-api/v1/orgaos/{cnpj}/compras/{ano}/{seq}/arquivos"
 PAGINA_PNCP = "https://pncp.gov.br/app/editais/{cnpj}/{ano}/{seq}"
 
+# Domínio do linkSistemaOrigem -> nome amigável da plataforma de disputa
+SISTEMAS_POR_DOMINIO = {
+    "bll.org.br": "BLL",
+    "bllcompras.com": "BLL",
+    "bnccompras.com": "BNC",
+    "bnc.org.br": "BNC",
+    "portaldecompraspublicas.com.br": "Portal de Compras Publicas",
+    "licitanet.com.br": "LICITANET",
+    "licitardigital.com.br": "Licitar Digital",
+    "compras.gov.br": "Compras.gov.br",
+    "comprasnet.gov.br": "Compras.gov.br",
+    "bbmnetlicitacoes.com.br": "BBMNET",
+    "licitacoes-e.com.br": "Licitacoes-e (BB)",
+    "portalcompras.parana": "Compras Parana",
+    "pncp.gov.br": "PNCP",
+}
+
+
+def _nome_sistema(objeto: str, link_sistema: str) -> str:
+    """Nome da plataforma de disputa: prefixo '[Plataforma] - ...' do objeto
+    (quando o publicador o inclui) ou o domínio do linkSistemaOrigem mapeado."""
+    m = re.match(r"^\s*\[([^\]]{2,60})\]", objeto or "")
+    if m:
+        return m.group(1).strip()
+    dominio = re.sub(r"^https?://(www\.)?", "", link_sistema or "").split("/")[0].lower()
+    for chave, nome in SISTEMAS_POR_DOMINIO.items():
+        if chave in dominio:
+            return nome
+    return dominio or ""
+
 # Modalidades relevantes (Lei 14.133): 6=Pregão eletrônico, 8=Dispensa, 4=Concorrência eletrônica
 MODALIDADES = [6, 8, 4]
 
@@ -137,7 +167,10 @@ class PNCPCollector(BaseCollector):
         cnpj = orgao.get("cnpj", "")
         ano = item.get("anoCompra", "")
         seq = item.get("sequencialCompra", "")
+        endereco = (item.get("linkSistemaOrigem") or "").strip()
         return LicitacaoColetada(
+            sistema=_nome_sistema(item.get("objetoCompra", ""), endereco),
+            endereco_licitacao=endereco,
             fonte=self.fonte,
             id_externo=item.get("numeroControlePNCP", f"{cnpj}-{ano}-{seq}"),
             orgao=orgao.get("razaoSocial", ""),

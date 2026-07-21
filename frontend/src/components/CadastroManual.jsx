@@ -12,6 +12,8 @@ const FORM_VAZIO = {
   data_abertura: '',
   data_encerramento: '',
   link: '',
+  sistema: '',
+  endereco_licitacao: '',
   observacoes: '',
   responsavel: '',
 }
@@ -26,6 +28,11 @@ const dataBr = (iso) => {
 const MODALIDADES = [
   'Pregão Eletrônico', 'Pregão Presencial', 'Concorrência', 'Dispensa de Licitação',
   'Inexigibilidade', 'Credenciamento', 'Leilão', 'Diálogo Competitivo',
+]
+
+const SISTEMAS = [
+  'BLL', 'BNC', 'Portal de Compras Publicas', 'Compras.gov.br', 'LICITANET',
+  'Licitar Digital', 'BBMNET', 'ConLicitação', 'PNCP', 'Licitações-e (BB)', 'Manual',
 ]
 
 export default function CadastroManual() {
@@ -67,6 +74,8 @@ export default function CadastroManual() {
         data_abertura: c.data_abertura || f.data_abertura,
         data_encerramento: c.data_encerramento || f.data_encerramento,
         link: c.link || f.link,
+        sistema: c.sistema || f.sistema,
+        endereco_licitacao: c.link || f.endereco_licitacao,
         responsavel: c.responsavel || f.responsavel,
         observacoes: c.observacoes || f.observacoes,
       }))
@@ -229,6 +238,19 @@ export default function CadastroManual() {
         <label>
           Link do edital / portal
           <input type="url" value={form.link} onChange={set('link')} placeholder="https://…" />
+        </label>
+        <label>
+          Sistema (onde a disputa corre)
+          <input list="sistemas" value={form.sistema} onChange={set('sistema')}
+            placeholder="Ex.: BLL, Portal de Compras Publicas" />
+          <datalist id="sistemas">
+            {SISTEMAS.map((s) => <option key={s} value={s} />)}
+          </datalist>
+        </label>
+        <label>
+          Endereço da licitação (link no sistema)
+          <input type="url" value={form.endereco_licitacao} onChange={set('endereco_licitacao')}
+            placeholder="Cole aqui o link que chega por e-mail — para abrir a página da licitação direto do card" />
         </label>
         <label>
           Responsável

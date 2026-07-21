@@ -204,6 +204,12 @@ function CartaoVisual({
             {docsRotulo}
           </button>
         )}
+        {lic?.endereco_licitacao && (
+          <a href={lic.endereco_licitacao} target="_blank" rel="noreferrer"
+            title={`Abrir a licitação no sistema${lic.sistema ? ` (${lic.sistema})` : ''}`}>
+            {lic.sistema || 'sistema'} ↗
+          </a>
+        )}
         {lic?.link && (
           <a href={lic.link} target="_blank" rel="noreferrer">edital ↗</a>
         )}

@@ -46,6 +46,10 @@ class CamposLicitacao(BaseModel):
     data_encerramento: str = Field(default="", description="Encerramento/limite, YYYY-MM-DD ou vazio")
     responsavel: str = Field(default="", description="Agente de contratação/pregoeiro/contato")
     link: str = Field(default="", description="URL do portal onde o certame corre, ou vazio")
+    sistema: str = Field(
+        default="",
+        description="Nome da plataforma de disputa (ex.: BLL, Portal de Compras Públicas), ou vazio",
+    )
     observacoes: str = Field(default="", description="Outras informações úteis, 1-3 frases")
 
 

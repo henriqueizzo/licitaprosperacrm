@@ -38,6 +38,8 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
     data_abertura: (licitacao.data_abertura || '').slice(0, 10),
     valor_estimado: licitacao.valor_estimado ?? '',
     link: licitacao.link || '',
+    sistema: licitacao.sistema || '',
+    endereco_licitacao: licitacao.endereco_licitacao || '',
   })
   const a = l.analise
 
@@ -67,6 +69,8 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
         data_abertura: form.data_abertura,
         valor_estimado: form.valor_estimado === '' ? null : Number(form.valor_estimado),
         link: form.link,
+        sistema: form.sistema,
+        endereco_licitacao: form.endereco_licitacao,
       })
       setL(nova)
       setEditando(false)
@@ -133,6 +137,7 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
           <strong>{l.orgao || 'Órgão não informado'}</strong>
           <small>
             {[l.municipio && `${l.municipio}/${l.uf}`, l.modalidade,
+              l.sistema && `Sistema: ${l.sistema}`,
               l.id_externo && `nº ${l.id_externo}`, FONTES[l.fonte] || l.fonte]
               .filter(Boolean).join(' · ')}
           </small>
@@ -188,6 +193,16 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
             Link do edital / portal
             <input type="url" value={form.link}
               onChange={(e) => setForm({ ...form, link: e.target.value })} />
+          </label>
+          <label>
+            Sistema (onde a disputa corre)
+            <input value={form.sistema} placeholder="Ex.: BLL, Portal de Compras Publicas"
+              onChange={(e) => setForm({ ...form, sistema: e.target.value })} />
+          </label>
+          <label>
+            Endereço da licitação (link no sistema)
+            <input type="url" value={form.endereco_licitacao} placeholder="https://…"
+              onChange={(e) => setForm({ ...form, endereco_licitacao: e.target.value })} />
           </label>
           <button type="button" className="primario" disabled={ocupado} onClick={salvarEdicao}>
             {salvando ? '⏳ Salvando…' : 'Salvar alterações'}
@@ -248,7 +263,14 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
         </p>
       )}
 
-      {l.link && <a href={l.link} target="_blank" rel="noreferrer">Abrir no portal ↗</a>}
+      <p className="detalhes-links">
+        {l.endereco_licitacao && (
+          <a href={l.endereco_licitacao} target="_blank" rel="noreferrer">
+            🔗 Abrir a licitação no sistema{l.sistema ? ` (${l.sistema})` : ''} ↗
+          </a>
+        )}
+        {l.link && <a href={l.link} target="_blank" rel="noreferrer">Abrir no portal ↗</a>}
+      </p>
     </div>
   )
 }

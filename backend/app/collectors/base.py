@@ -17,6 +17,8 @@ class LicitacaoColetada:
     data_encerramento: str = ""  # ISO 8601
     link: str = ""
     edital_url: str = ""
+    sistema: str = ""             # plataforma onde a disputa corre (BLL, PCP…)
+    endereco_licitacao: str = ""  # link da licitação nessa plataforma
     raw: dict = field(default_factory=dict)
 
 

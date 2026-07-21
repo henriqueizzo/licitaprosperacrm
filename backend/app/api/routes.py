@@ -170,6 +170,8 @@ class LicitacaoManualIn(BaseModel):
     data_encerramento: str = ""   # ISO (YYYY-MM-DD)
     link: str = ""
     edital_url: str = ""
+    sistema: str = ""
+    endereco_licitacao: str = ""
     observacoes: str = ""
     responsavel: str = ""
     criar_oportunidade: bool = True
@@ -217,6 +219,8 @@ def criar_licitacao_manual(
     lic.data_encerramento = dados.data_encerramento.strip()[:30]
     lic.link = dados.link.strip()
     lic.edital_url = dados.edital_url.strip() or dados.link.strip()
+    lic.sistema = dados.sistema.strip()
+    lic.endereco_licitacao = dados.endereco_licitacao.strip()
     if lic.status_analise != "analisada":
         # 'manual' fica fora do lote automático de análise IA (regra de negócio)
         lic.status_analise = "manual"
@@ -442,6 +446,11 @@ async def importar_analise_de_pdf(
         lic.data_encerramento = c.data_encerramento.strip()[:30]
     if not lic.link and c.link:
         lic.link = c.link.strip()
+    if not lic.sistema and c.sistema:
+        lic.sistema = c.sistema.strip()
+    # O portal de envio do relatório (Tabela 3) é o sistema onde a disputa corre
+    if not lic.endereco_licitacao and c.link:
+        lic.endereco_licitacao = c.link.strip()
 
     # Contato/forma de envio do relatório vão para as notas do card, se vazias
     if c.observacoes or c.responsavel:
@@ -550,6 +559,8 @@ class LicitacaoPatch(BaseModel):
     data_abertura: str | None = None
     data_encerramento: str | None = None
     link: str | None = None
+    sistema: str | None = None
+    endereco_licitacao: str | None = None
     suspensa: bool | None = None
 
 
@@ -997,6 +1008,7 @@ def _licitacao_out(l: Licitacao, db: Session, incluir_raw: bool = False):
         "municipio": l.municipio, "uf": l.uf, "modalidade": l.modalidade, "objeto": l.objeto,
         "valor_estimado": l.valor_estimado, "data_abertura": l.data_abertura,
         "data_encerramento": l.data_encerramento, "link": l.link,
+        "sistema": l.sistema, "endereco_licitacao": l.endereco_licitacao,
         "status_analise": l.status_analise, "suspensa": l.suspensa,
         "analise": _analise_out(analise),
         "documentos": _docs_progresso(l, db, analise),

@@ -1173,6 +1173,7 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
   margin-top: 10px;
 }
 .atividade-uso-dia { max-width: 520px; }
+.detalhes-links { display: flex; gap: 18px; flex-wrap: wrap; }
 
 /* ---------- Aba Dashboard (report executivo) ---------- */
 .dashboard { display: flex; flex-direction: column; gap: 16px; }

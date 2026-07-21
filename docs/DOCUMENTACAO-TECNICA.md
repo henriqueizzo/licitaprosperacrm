@@ -189,7 +189,7 @@ Todas as tabelas são criadas por `Base.metadata.create_all` + `migrar_esquema()
 |---|---|---|
 | `usuarios` | Login (email + bcrypt) | `is_admin`, `ativo`, `ultimo_acesso` (atualizado no máx. 1x/min) |
 | `sessoes` | Sessões de login | guarda **apenas o SHA-256** do token (token vai no cookie HttpOnly `sessao`) |
-| `licitacoes` | Licitação coletada/cadastrada | `UNIQUE(fonte, id_externo)` é a identidade; `status_analise`: `pendente\|analisada\|erro\|manual`; `suspensa` (marcador, não estágio); `raw_json` (payload da fonte) |
+| `licitacoes` | Licitação coletada/cadastrada | `UNIQUE(fonte, id_externo)` é a identidade; `status_analise`: `pendente\|analisada\|erro\|manual`; `suspensa` (marcador, não estágio); `sistema` (plataforma de disputa — BLL, PCP…) e `endereco_licitacao` (link da licitação nessa plataforma; PNCP preenche via `linkSistemaOrigem`/prefixo do objeto, backfill no startup); `raw_json` (payload da fonte) |
 | `licitacoes_excluidas` | Lápides de exclusão | sem elas o PNCP recriaria a licitação excluída no ciclo seguinte |
 | `analises` | Resultado da análise IA (1 por licitação) | `score_beneficios`/`score_pagamentos` (0–10), `classificacao_final`, `credenciamento_viavel/analise`, `alertas_impugnacao` (JSON), `documentos_habilitacao` (JSON — alimenta o checklist), `analise_completa` (texto integral), `prazos`/`riscos`/`exigencias_*` (JSON), `tokens_entrada/saida` |
 | `oportunidades` | Card do kanban (1 por licitação) | `estagio` (ver `Oportunidade.ESTAGIOS`), `notas`, `responsavel` |

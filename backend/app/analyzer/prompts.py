@@ -323,6 +323,9 @@ REGRAS PARA `campos` (sempre preencher):
 - link: URL do portal onde o certame corre / onde a documentação é enviada (em
   relatório de análise: Tabela 3 "Portal/Site (URL)"). Complete com https:// se
   vier só o domínio (ex.: www.bll.org.br -> https://www.bll.org.br). Vazio se não constar.
+- sistema: NOME da plataforma de disputa, ex.: "BLL", "BNC", "Portal de Compras
+  Públicas", "Compras.gov.br", "LICITANET", "Licitar Digital". Derive do portal de
+  envio se não estiver explícito. Vazio se não der para saber.
 - observacoes: informações úteis que não couberam nos demais campos (forma de envio
   da documentação, e-mail/telefone de contato, exigências marcantes), em 1-3 frases.
 

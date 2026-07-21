@@ -120,7 +120,11 @@ def test_cadastro_com_analise_importada():
         # --- cadastro SEM análise: comportamento antigo preservado ---
         r = cliente.post("/api/licitacoes", json={
             "objeto": "Outra licitação manual", "numero_certame": "020/2026",
+            "sistema": "Portal de Compras Publicas",
+            "endereco_licitacao": "https://www.portaldecompraspublicas.com.br/processos/123",
         })
+        assert r.json()["sistema"] == "Portal de Compras Publicas"
+        assert r.json()["endereco_licitacao"].endswith("/123")
         assert r.status_code == 201
         lic2_id = r.json()["id"]
         db = TestingSession()
@@ -155,6 +159,7 @@ def test_cadastro_com_analise_importada():
                 municipio="União Paulista", uf="SP", valor_estimado=818694.0,
                 data_encerramento="2026-07-17",
                 link="https://www.bll.org.br",
+                sistema="BLL",
                 responsavel="Kendrea Alves Papile Cavatao (Prefeita)",
                 observacoes="Envio exclusivamente pelo portal BLL.",
             ),
@@ -190,6 +195,9 @@ def test_cadastro_com_analise_importada():
         assert atualizada["valor_estimado"] == 818694.0
         assert atualizada["objeto"] == "Card automático sem análise"
         assert atualizada["link"] == "https://www.bll.org.br"
+        # Sistema e endereço da licitação preenchidos pelo relatório
+        assert atualizada["sistema"] == "BLL"
+        assert atualizada["endereco_licitacao"] == "https://www.bll.org.br"
         # Contato/observações do relatório viram notas do card (estavam vazias)
         db = TestingSession()
         from app.models import Oportunidade

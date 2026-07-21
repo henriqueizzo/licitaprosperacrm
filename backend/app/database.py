@@ -39,9 +39,12 @@ def _migracoes(dialeto: str) -> dict[str, dict[str, str]]:
     bool_false = "0" if dialeto == "sqlite" else "FALSE"
     return {
         "analises": _migracoes_analises(dialeto),
-        # Marcador de certame suspenso (silencia o alerta de prazo do card)
+        # Marcador de certame suspenso (silencia o alerta de prazo do card) +
+        # sistema de disputa (BLL etc.) e endereco da licitacao nesse sistema.
         "licitacoes": {
             "suspensa": f"BOOLEAN NOT NULL DEFAULT {bool_false}",
+            "sistema": "TEXT NOT NULL DEFAULT ''",
+            "endereco_licitacao": "TEXT NOT NULL DEFAULT ''",
         },
         "execucoes_pipeline": {
             "avisos": "JSON",

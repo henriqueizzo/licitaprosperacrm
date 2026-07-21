@@ -110,7 +110,8 @@ def executar_coleta(db: Session, dias: int = 3) -> dict:
                 fonte=c.fonte, id_externo=c.id_externo, orgao=c.orgao, municipio=c.municipio,
                 uf=c.uf, modalidade=c.modalidade, objeto=c.objeto, valor_estimado=c.valor_estimado,
                 data_abertura=c.data_abertura, data_encerramento=c.data_encerramento,
-                link=c.link, edital_url=c.edital_url, raw_json=c.raw,
+                link=c.link, edital_url=c.edital_url,
+                sistema=c.sistema, endereco_licitacao=c.endereco_licitacao, raw_json=c.raw,
             )
             db.add(lic)
             # TODA licitação coletada entra no pipeline como 'identificada' — a análise

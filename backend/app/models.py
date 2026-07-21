@@ -78,6 +78,10 @@ class Licitacao(Base):
     data_encerramento: Mapped[str] = mapped_column(String(30), default="")  # ISO
     link: Mapped[str] = mapped_column(Text, default="")
     edital_url: Mapped[str] = mapped_column(Text, default="")
+    # Sistema onde a disputa corre (BLL, Portal de Compras Públicas, ConLicitação…)
+    # e o endereço da licitação nesse sistema (link que o time recebe por e-mail).
+    sistema: Mapped[str] = mapped_column(Text, default="")
+    endereco_licitacao: Mapped[str] = mapped_column(Text, default="")
     status_analise: Mapped[str] = mapped_column(String(20), default="pendente")  # pendente|analisada|erro|descartada_filtro
     # Certame suspenso (marcado pelo time): silencia o alerta de prazo no card
     # até a licitação ser reativada — o prazo antigo deixa de valer.
