@@ -29,10 +29,11 @@ const post = (body) => ({
   body: JSON.stringify(body),
 })
 
-// Polling de job de extração por PDF (a cada 3s, por até 6 min)
+// Polling de job de extração por PDF (a cada 3s, por até 10 min — com a cota
+// gratuita do Gemini congestionada a leitura pode passar de 7 min)
 async function aguardarExtracao(jobId) {
   const inicio = Date.now()
-  while (Date.now() - inicio < 6 * 60 * 1000) {
+  while (Date.now() - inicio < 10 * 60 * 1000) {
     await new Promise((r) => setTimeout(r, 3000))
     const job = await req(`/api/extracoes/${jobId}`)
     if (job.status === 'pronto') return job.resultado
