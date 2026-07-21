@@ -118,8 +118,11 @@ class AnalisadorEditalGemini:
         # caber no corte de ~100s do proxy do Render. Retries CURTOS pelo mesmo
         # motivo: retry longo estoura o proxy, o usuário clica de novo e a
         # execução dobrada grava dados duplicados.
+        # max_tokens 16k: o modelo reserva às vezes ignora a instrução de NÃO
+        # transcrever e produz resposta longa — com 8k o JSON vinha truncado e a
+        # validação estourava ("erro 500" no cadastro via PDF).
         response = self._gerar_com_retry(
-            contents, system=SYSTEM_EXTRACAO, schema=ExtracaoCadastro, max_tokens=8000,
+            contents, system=SYSTEM_EXTRACAO, schema=ExtracaoCadastro, max_tokens=16000,
             esperas_429=[5], esperas_5xx=[5],
             # Extração é cópia estruturada, não raciocínio: thinking desligado
             # corta mais da metade do tempo de resposta (crítico p/ o proxy)
@@ -127,7 +130,22 @@ class AnalisadorEditalGemini:
         )
         extracao = response.parsed
         if extracao is None:
-            extracao = ExtracaoCadastro.model_validate_json(response.text)
+            texto = response.text
+            if not texto:
+                fr = None
+                if getattr(response, "candidates", None):
+                    fr = getattr(response.candidates[0], "finish_reason", None)
+                logger.warning("Extração sem texto na resposta do Gemini (finish_reason=%s)", fr)
+                raise RuntimeError(
+                    "A IA não retornou a extração (resposta vazia/bloqueada) — tente novamente."
+                )
+            try:
+                extracao = ExtracaoCadastro.model_validate_json(texto)
+            except Exception as exc:
+                logger.warning("JSON da extração inválido/truncado (%d chars): %s", len(texto), exc)
+                raise RuntimeError(
+                    "A IA retornou uma resposta incompleta — tente novamente em instantes."
+                ) from exc
         if extracao.analise is not None:
             extracao.analise.normalizar()
         return extracao
