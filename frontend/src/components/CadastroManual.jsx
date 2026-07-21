@@ -89,7 +89,11 @@ export default function CadastroManual() {
           : '✅ Campos preenchidos — revise abaixo e clique em "Cadastrar licitação".'
       )
     } catch (e) {
-      setMsg(`⚠ Não consegui preencher automaticamente: ${e.message}`)
+      setMsg(
+        /50[24]/.test(e.message)
+          ? '⚠ A leitura demorou além do limite do servidor. Aguarde alguns segundos e clique de novo — a próxima tentativa costuma ser mais rápida.'
+          : `⚠ Não consegui preencher automaticamente: ${e.message}`
+      )
     } finally {
       setExtraindo(false)
     }

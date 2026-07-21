@@ -56,7 +56,17 @@ def _normalizar_pdfs(pdf_bytes: bytes | list[bytes] | None, teto: int) -> list[b
 
 class AnalisadorEditalGemini:
     def __init__(self):
-        self.client = genai.Client(api_key=settings.gemini_api_key)
+        # attempts=1 DESLIGA o retry interno do SDK (tenacity): com cota esgotada
+        # ele dormia minutos obedecendo o "retry in 59s" do Google ANTES de nos
+        # devolver o 429 — nossos retries curtos nunca valiam e as chamadas
+        # interativas estouravam o corte de ~100s do proxy do Render (502).
+        # Toda a política de retry/fallback é nossa, em _gerar_com_retry.
+        self.client = genai.Client(
+            api_key=settings.gemini_api_key,
+            http_options=genai_types.HttpOptions(
+                retry_options=genai_types.HttpRetryOptions(attempts=1),
+            ),
+        )
 
     def analisar(self, dados_licitacao: dict, perfil: dict,
                  pdf_bytes: bytes | list[bytes] | None = None,
@@ -103,14 +113,17 @@ class AnalisadorEditalGemini:
         if pdf_bytes:
             contents.append(genai_types.Part.from_bytes(data=pdf_bytes, mime_type="application/pdf"))
         contents.append(prompt_extracao(texto, tem_pdf=pdf_bytes is not None))
-        # max_tokens alto: a transcrição integral de um relatório de análise é longa
-        # e o "thinking" do Gemini também consome o orçamento — 16k truncava o JSON.
-        # Retries CURTOS: chamada interativa atrás do proxy do Render, que corta a
-        # requisição em ~100s — retry longo estoura o proxy, o usuário clica de novo
-        # e a execução dobrada grava dados duplicados.
+        # A extração NÃO transcreve o documento (analise_completa fica vazia e o
+        # backend a preenche com o texto do PDF) — resposta curta o bastante para
+        # caber no corte de ~100s do proxy do Render. Retries CURTOS pelo mesmo
+        # motivo: retry longo estoura o proxy, o usuário clica de novo e a
+        # execução dobrada grava dados duplicados.
         response = self._gerar_com_retry(
-            contents, system=SYSTEM_EXTRACAO, schema=ExtracaoCadastro, max_tokens=32000,
-            esperas_429=[8], esperas_5xx=[8],
+            contents, system=SYSTEM_EXTRACAO, schema=ExtracaoCadastro, max_tokens=8000,
+            esperas_429=[5], esperas_5xx=[5],
+            # Extração é cópia estruturada, não raciocínio: thinking desligado
+            # corta mais da metade do tempo de resposta (crítico p/ o proxy)
+            thinking_budget=0,
         )
         extracao = response.parsed
         if extracao is None:
@@ -135,7 +148,8 @@ class AnalisadorEditalGemini:
     def _gerar_com_retry(self, contents: list, system: str = SYSTEM_ANALISTA,
                          schema=ResultadoAnalise, max_tokens: int = 16000,
                          esperas_429: list[int] | None = None,
-                         esperas_5xx: list[int] | None = None):
+                         esperas_5xx: list[int] | None = None,
+                         thinking_budget: int | None = None):
         esperas_429 = ESPERAS_RATE_LIMIT if esperas_429 is None else esperas_429
         esperas_5xx = ESPERAS_5XX if esperas_5xx is None else esperas_5xx
         modelos = [settings.gemini_model] + [m for m in MODELOS_FALLBACK if m != settings.gemini_model]
@@ -146,7 +160,7 @@ class AnalisadorEditalGemini:
             tentativas_5xx = 0
             while True:
                 try:
-                    return self._gerar(modelo, contents, system, schema, max_tokens)
+                    return self._gerar(modelo, contents, system, schema, max_tokens, thinking_budget)
                 except genai_errors.APIError as exc:
                     if exc.code == 429:
                         if rate_limits < len(esperas_429):
@@ -182,7 +196,8 @@ class AnalisadorEditalGemini:
             ) from cota_esgotada
         raise ultima_5xx  # todos os modelos indisponíveis (transitório — próximo ciclo resolve)
 
-    def _gerar(self, modelo: str, contents: list, system: str, schema, max_tokens: int):
+    def _gerar(self, modelo: str, contents: list, system: str, schema, max_tokens: int,
+               thinking_budget: int | None = None):
         # schema=None: saída em texto corrido (redigir); com schema: JSON validado
         config = genai_types.GenerateContentConfig(
             system_instruction=system,
@@ -191,6 +206,8 @@ class AnalisadorEditalGemini:
         if schema is not None:
             config.response_mime_type = "application/json"
             config.response_schema = schema
+        if thinking_budget is not None:
+            config.thinking_config = genai_types.ThinkingConfig(thinking_budget=thinking_budget)
         return self.client.models.generate_content(
             model=modelo,
             contents=contents,

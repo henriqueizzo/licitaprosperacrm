@@ -29,6 +29,21 @@ const post = (body) => ({
   body: JSON.stringify(body),
 })
 
+// Polling de job de extração por PDF (a cada 3s, por até 6 min)
+async function aguardarExtracao(jobId) {
+  const inicio = Date.now()
+  while (Date.now() - inicio < 6 * 60 * 1000) {
+    await new Promise((r) => setTimeout(r, 3000))
+    const job = await req(`/api/extracoes/${jobId}`)
+    if (job.status === 'pronto') return job.resultado
+    if (job.status === 'erro') {
+      // Prefixa o código para os componentes distinguirem (ex.: 422 = PDF não é análise)
+      throw new Error(`${job.codigo || ''} ${job.erro || 'Falha na leitura do PDF'}`.trim())
+    }
+  }
+  throw new Error('Tempo esgotado na leitura do PDF — tente novamente.')
+}
+
 export const api = {
   // Dashboard executivo (bloco "atividade" só vem para admin)
   dashboard: (dias = 30) => req(`/api/dashboard?dias=${dias}`),
@@ -38,16 +53,20 @@ export const api = {
     req(`/api/licitacoes/${id}`, { ...post(patch), method: 'PATCH' }),
   excluirLicitacao: (id) => req(`/api/licitacoes/${id}`, { method: 'DELETE' }),
   extrairLicitacao: (texto, url) => req('/api/licitacoes/extrair', post({ texto, url })),
-  extrairLicitacaoPdf: (arquivo) => {
+  // A leitura de PDF pela IA é assíncrona (o servidor responde 202 com job_id e
+  // o resultado sai por polling) — por baixo do corte de ~100s do proxy do Render.
+  extrairLicitacaoPdf: async (arquivo) => {
     const fd = new FormData()
     fd.append('arquivo', arquivo)
-    return req('/api/licitacoes/extrair-arquivo', { method: 'POST', body: fd })
+    const { job_id } = await req('/api/licitacoes/extrair-arquivo', { method: 'POST', body: fd })
+    return aguardarExtracao(job_id)
   },
   // Importa a análise em PDF (relatório do time) para um card existente
-  importarAnalisePdf: (licitacaoId, arquivo) => {
+  importarAnalisePdf: async (licitacaoId, arquivo) => {
     const fd = new FormData()
     fd.append('arquivo', arquivo)
-    return req(`/api/licitacoes/${licitacaoId}/analise-arquivo`, { method: 'POST', body: fd })
+    const { job_id } = await req(`/api/licitacoes/${licitacaoId}/analise-arquivo`, { method: 'POST', body: fd })
+    return aguardarExtracao(job_id)
   },
   // Gera a declaração em Word e devolve { blob, nome, origem } ('ia' | 'modelo')
   gerarDeclaracao: async (licitacaoId, documento, referencia = '') => {

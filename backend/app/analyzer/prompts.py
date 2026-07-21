@@ -350,8 +350,9 @@ REGRAS PARA `analise`:
 - prazos, riscos, exigencias_habilitacao, exigencias_tecnicas, atestados_exigidos,
   custo_emissao_cartoes, objeto_resumido, justificativa: extraia das seções
   correspondentes do relatório.
-- analise_completa: transcrição integral do conteúdo do relatório em Markdown,
-  preservando as tabelas (como tabelas Markdown) e todas as seções na ordem original.
+- analise_completa: deixe como STRING VAZIA (""). NÃO transcreva o documento — o
+  sistema preenche este campo com o texto do próprio arquivo. Isso é essencial
+  para a resposta ser rápida.
 """
 
 

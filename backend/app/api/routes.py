@@ -337,6 +337,7 @@ def extrair_campos_licitacao(
         raise HTTPException(503, f"IA indisponível no momento: {exc}")
     except RuntimeError as exc:
         raise HTTPException(503, str(exc))
+    _completar_analise_importada(extracao, _texto_do_pdf(pdf) if pdf else (texto or ""))
 
     registrar_evento(db, usuario, "extracao_cadastro", detalhe=(url or "texto colado")[:300])
 
@@ -348,40 +349,120 @@ def extrair_campos_licitacao(
 
 MAX_PDF_EXTRACAO = 19 * 1024 * 1024  # limite inline do Gemini
 
+# ---------- Jobs de extração por PDF (assíncronos) ----------
+# O proxy do Render corta requisições em ~100s e a leitura de PDF pela IA pode
+# passar disso quando o nível gratuito do Gemini está congestionado — o usuário
+# tomava 502 no cadastro via PDF. As rotas de extração respondem 202 com um
+# job_id e o trabalho roda em thread; o frontend faz polling em
+# GET /api/extracoes/{job_id}. Registro em memória (1 instância no Render free);
+# jobs expiram em 30 min.
+import threading as _threading
+import time as _time
 
-@router.post("/licitacoes/extrair-arquivo")
+_JOBS: dict[str, dict] = {}
+_JOBS_LOCK = _threading.Lock()
+_JOB_TTL_SEGUNDOS = 30 * 60
+
+
+def _iniciar_job(trabalho) -> str:
+    from ..analyzer import ErroCotaIA
+
+    corte = _time.time() - _JOB_TTL_SEGUNDOS
+    with _JOBS_LOCK:
+        for expirado in [j for j, d in _JOBS.items() if d["criado_em"] < corte]:
+            del _JOBS[expirado]
+
+    job_id = uuid4().hex
+    with _JOBS_LOCK:
+        _JOBS[job_id] = {"status": "processando", "criado_em": _time.time()}
+
+    def _rodar():
+        try:
+            atual = {"status": "pronto", "resultado": trabalho()}
+        except HTTPException as exc:
+            atual = {"status": "erro", "codigo": exc.status_code, "erro": exc.detail}
+        except ErroCotaIA as exc:
+            atual = {"status": "erro", "codigo": 503, "erro": f"IA indisponível no momento: {exc}"}
+        except RuntimeError as exc:
+            atual = {"status": "erro", "codigo": 503, "erro": str(exc)}
+        except Exception:
+            logger.exception("Job de extração %s falhou", job_id)
+            atual = {"status": "erro", "codigo": 500,
+                     "erro": "Falha inesperada na leitura do PDF — tente novamente."}
+        with _JOBS_LOCK:
+            _JOBS[job_id].update(atual)
+
+    _threading.Thread(target=_rodar, daemon=True).start()
+    return job_id
+
+
+@router.get("/extracoes/{job_id}")
+def status_extracao(job_id: str):
+    """Status de um job de extração: processando | pronto (+resultado) | erro (+codigo/erro)."""
+    with _JOBS_LOCK:
+        job = _JOBS.get(job_id)
+    if not job:
+        raise HTTPException(404, "Extração não encontrada (expirou?) — anexe o PDF novamente.")
+    return {k: v for k, v in job.items() if k != "criado_em"}
+
+
+def _texto_do_pdf(conteudo: bytes) -> str:
+    """Extrai o texto de um PDF localmente (pypdf) — instantâneo e fiel.
+
+    Usado para preencher `analise_completa` de análises importadas: pedir a
+    transcrição à IA dobrava o tamanho da resposta e estourava o corte de ~100s
+    do proxy do Render (502 nos cadastros via PDF).
+    """
+    try:
+        from io import BytesIO
+
+        from pypdf import PdfReader
+
+        paginas = [(p.extract_text() or "") for p in PdfReader(BytesIO(conteudo)).pages]
+        return "\n\n".join(paginas).strip()[:200000]
+    except Exception as exc:
+        logger.warning("Falha ao extrair texto do PDF: %s", exc)
+        return ""
+
+
+def _completar_analise_importada(extracao, texto_fonte: str) -> None:
+    """Preenche analise_completa (que a IA deixa vazia de propósito) com o texto do documento."""
+    if extracao.analise is not None and not (extracao.analise.analise_completa or "").strip():
+        extracao.analise.analise_completa = texto_fonte or "(texto do documento indisponível)"
+
+
+@router.post("/licitacoes/extrair-arquivo", status_code=202)
 async def extrair_campos_de_pdf(
     arquivo: UploadFile,
     usuario: Usuario = Depends(usuario_atual),
     db: Session = Depends(get_db),
 ):
-    """Extrai os campos do cadastro a partir de um PDF do edital anexado pelo usuário.
-
-    Mesmo fluxo do /licitacoes/extrair, mas com o arquivo enviado direto (multipart)
-    em vez de link — útil quando o edital só existe como arquivo local.
+    """Extrai os campos do cadastro a partir de um PDF anexado (edital ou relatório
+    de análise). ASSÍNCRONO: responde 202 com job_id; o resultado sai em
+    GET /api/extracoes/{job_id} (a leitura pela IA pode passar do corte de ~100s
+    do proxy do Render).
     """
-    from ..analyzer import ErroCotaIA, criar_analisador
-
     conteudo = await arquivo.read()
     if not conteudo.startswith(b"%PDF"):
         raise HTTPException(400, "Envie um arquivo PDF (o edital em .pdf).")
     if len(conteudo) > MAX_PDF_EXTRACAO:
         raise HTTPException(413, "PDF excede o tamanho máximo de 19 MB para leitura pela IA.")
 
-    try:
-        extracao = criar_analisador().extrair(pdf_bytes=conteudo)
-    except ErroCotaIA as exc:
-        raise HTTPException(503, f"IA indisponível no momento: {exc}")
-    except RuntimeError as exc:
-        raise HTTPException(503, str(exc))
-
     registrar_evento(db, usuario, "extracao_cadastro", detalhe=f"pdf: {arquivo.filename or ''}"[:300])
-    out = extracao.campos.model_dump()
-    out["analise"] = extracao.analise.model_dump() if extracao.analise else None
-    return out
+
+    def trabalho():
+        from ..analyzer import criar_analisador
+
+        extracao = criar_analisador().extrair(pdf_bytes=conteudo)
+        _completar_analise_importada(extracao, _texto_do_pdf(conteudo))
+        out = extracao.campos.model_dump()
+        out["analise"] = extracao.analise.model_dump() if extracao.analise else None
+        return out
+
+    return {"job_id": _iniciar_job(trabalho)}
 
 
-@router.post("/licitacoes/{licitacao_id}/analise-arquivo")
+@router.post("/licitacoes/{licitacao_id}/analise-arquivo", status_code=202)
 async def importar_analise_de_pdf(
     licitacao_id: int,
     arquivo: UploadFile,
@@ -390,16 +471,12 @@ async def importar_analise_de_pdf(
 ):
     """Importa a análise de um relatório em PDF para uma licitação já cadastrada.
 
-    Substitui a reanálise IA nos cards: o operador anexa o relatório de análise
-    feito pelo time (mesmo formato do Cadastro Manual) e o card é atualizado —
-    classificação, scores, alertas e o checklist de documentação. Campos vazios
-    da licitação (valor, datas, município…) são preenchidos com o que o
-    relatório trouxer; campos já preenchidos NUNCA são sobrescritos.
+    O card é atualizado — classificação, scores, alertas e o checklist de
+    documentação; campos vazios da licitação são preenchidos com o que o
+    relatório trouxer (campos preenchidos NUNCA são sobrescritos).
+    ASSÍNCRONO: responde 202 com job_id; resultado em GET /api/extracoes/{job_id}.
     """
-    from ..analyzer import ErroCotaIA, criar_analisador
-
-    lic = db.get(Licitacao, licitacao_id)
-    if not lic:
+    if not db.get(Licitacao, licitacao_id):
         raise HTTPException(404, "Licitação não encontrada")
 
     conteudo = await arquivo.read()
@@ -408,69 +485,82 @@ async def importar_analise_de_pdf(
     if len(conteudo) > MAX_PDF_EXTRACAO:
         raise HTTPException(413, "PDF excede o tamanho máximo de 19 MB para leitura pela IA.")
 
-    try:
+    usuario_id = usuario.id
+    nome_arquivo = arquivo.filename or ""
+
+    def trabalho():
+        from ..analyzer import criar_analisador
+        from ..database import SessionLocal
+
         extracao = criar_analisador().extrair(pdf_bytes=conteudo)
-    except ErroCotaIA as exc:
-        raise HTTPException(503, f"IA indisponível no momento: {exc}")
-    except RuntimeError as exc:
-        raise HTTPException(503, str(exc))
+        if extracao.analise is None:
+            raise HTTPException(
+                422,
+                "Este PDF não parece ser um relatório de análise (não encontrei checklist de "
+                "documentos, scores e classificação). Anexe o PDF da nossa análise do edital.",
+            )
+        _completar_analise_importada(extracao, _texto_do_pdf(conteudo))
 
-    if extracao.analise is None:
-        raise HTTPException(
-            422,
-            "Este PDF não parece ser um relatório de análise (não encontrei checklist de "
-            "documentos, scores e classificação). Anexe o PDF da nossa análise do edital.",
-        )
+        db_job = SessionLocal()
+        try:
+            lic = db_job.get(Licitacao, licitacao_id)
+            if not lic:
+                raise HTTPException(404, "Licitação não encontrada")
+            if not _gravar_analise_importada(db_job, lic, extracao.analise.model_dump()):
+                raise HTTPException(422, "Não consegui estruturar a análise deste PDF — tente novamente.")
 
-    if not _gravar_analise_importada(db, lic, extracao.analise.model_dump()):
-        raise HTTPException(422, "Não consegui estruturar a análise deste PDF — tente novamente.")
+            # Complementa campos vazios da licitação com o que o relatório trouxer
+            # (nunca sobrescreve o que já está preenchido)
+            c = extracao.campos
+            if not lic.objeto and c.objeto:
+                lic.objeto = c.objeto.strip()
+            if not lic.orgao and c.orgao:
+                lic.orgao = c.orgao.strip()[:300]
+            if not lic.municipio and c.municipio:
+                lic.municipio = c.municipio.strip()[:120]
+            if not lic.uf and c.uf:
+                lic.uf = c.uf.strip().upper()[:2]
+            if not lic.modalidade and c.modalidade:
+                lic.modalidade = c.modalidade.strip()[:80]
+            if lic.valor_estimado is None and c.valor_estimado is not None:
+                lic.valor_estimado = c.valor_estimado
+            if not lic.data_abertura and c.data_abertura:
+                lic.data_abertura = c.data_abertura.strip()[:30]
+            if not lic.data_encerramento and c.data_encerramento:
+                lic.data_encerramento = c.data_encerramento.strip()[:30]
+            if not lic.link and c.link:
+                lic.link = c.link.strip()
+            if not lic.sistema and c.sistema:
+                lic.sistema = c.sistema.strip()
+            # O portal de envio do relatório (Tabela 3) é o sistema onde a disputa corre
+            if not lic.endereco_licitacao and c.link:
+                lic.endereco_licitacao = c.link.strip()
 
-    # Complementa campos vazios da licitação com o que o relatório trouxer
-    # (nunca sobrescreve o que já está preenchido)
-    c = extracao.campos
-    if not lic.objeto and c.objeto:
-        lic.objeto = c.objeto.strip()
-    if not lic.orgao and c.orgao:
-        lic.orgao = c.orgao.strip()[:300]
-    if not lic.municipio and c.municipio:
-        lic.municipio = c.municipio.strip()[:120]
-    if not lic.uf and c.uf:
-        lic.uf = c.uf.strip().upper()[:2]
-    if not lic.modalidade and c.modalidade:
-        lic.modalidade = c.modalidade.strip()[:80]
-    if lic.valor_estimado is None and c.valor_estimado is not None:
-        lic.valor_estimado = c.valor_estimado
-    if not lic.data_abertura and c.data_abertura:
-        lic.data_abertura = c.data_abertura.strip()[:30]
-    if not lic.data_encerramento and c.data_encerramento:
-        lic.data_encerramento = c.data_encerramento.strip()[:30]
-    if not lic.link and c.link:
-        lic.link = c.link.strip()
-    if not lic.sistema and c.sistema:
-        lic.sistema = c.sistema.strip()
-    # O portal de envio do relatório (Tabela 3) é o sistema onde a disputa corre
-    if not lic.endereco_licitacao and c.link:
-        lic.endereco_licitacao = c.link.strip()
+            # Contato/forma de envio do relatório vão para as notas do card, se vazias
+            if c.observacoes or c.responsavel:
+                oportunidade = db_job.execute(
+                    select(Oportunidade).where(Oportunidade.licitacao_id == lic.id)
+                ).scalars().first()
+                if oportunidade and not (oportunidade.notas or "").strip():
+                    notas = []
+                    if c.responsavel:
+                        notas.append(f"Responsável pelo certame: {c.responsavel.strip()}")
+                    if c.observacoes:
+                        notas.append(c.observacoes.strip())
+                    oportunidade.notas = "\n".join(notas)
+            db_job.commit()
 
-    # Contato/forma de envio do relatório vão para as notas do card, se vazias
-    if c.observacoes or c.responsavel:
-        oportunidade = db.execute(
-            select(Oportunidade).where(Oportunidade.licitacao_id == lic.id)
-        ).scalars().first()
-        if oportunidade and not (oportunidade.notas or "").strip():
-            notas = []
-            if c.responsavel:
-                notas.append(f"Responsável pelo certame: {c.responsavel.strip()}")
-            if c.observacoes:
-                notas.append(c.observacoes.strip())
-            oportunidade.notas = "\n".join(notas)
-    db.commit()
+            quem = db_job.get(Usuario, usuario_id)
+            if quem:
+                registrar_evento(
+                    db_job, quem, "importar_analise", licitacao_id=lic.id,
+                    detalhe=f"pdf: {nome_arquivo}"[:300],
+                )
+            return _licitacao_out(lic, db_job)
+        finally:
+            db_job.close()
 
-    registrar_evento(
-        db, usuario, "importar_analise", licitacao_id=lic.id,
-        detalhe=f"pdf: {arquivo.filename or ''}"[:300],
-    )
-    return _licitacao_out(lic, db)
+    return {"job_id": _iniciar_job(trabalho)}
 
 
 

@@ -103,7 +103,9 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
       setMsg(
         err.message.includes('422')
           ? '⚠ Este PDF não parece ser o relatório de análise do edital — anexe o PDF da nossa análise.'
-          : `Erro ao importar a análise: ${err.message}`
+          : /50[24]/.test(err.message)
+            ? '⚠ A leitura demorou além do limite do servidor. Aguarde alguns segundos e anexe de novo.'
+            : `Erro ao importar a análise: ${err.message}`
       )
     } finally {
       setImportando(false)

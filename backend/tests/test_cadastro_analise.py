@@ -149,9 +149,22 @@ def test_cadastro_com_analise_importada():
         db.close()
 
         # --- importar análise por PDF em card existente (IA mockada) ---
+        # Rota assíncrona: 202 + job_id, resultado via GET /api/extracoes/{job_id}
+        import time as time_mod
         from unittest.mock import patch
 
         from app.analyzer.schemas import CamposLicitacao, ExtracaoCadastro, ResultadoAnalise
+
+        def aguardar_job(resp):
+            assert resp.status_code == 202, resp.text
+            job_id = resp.json()["job_id"]
+            for _ in range(200):
+                r = cliente.get(f"/api/extracoes/{job_id}")
+                assert r.status_code == 200
+                if r.json()["status"] != "processando":
+                    return r.json()
+                time_mod.sleep(0.05)
+            raise AssertionError("job de extração não terminou")
 
         extracao_fake = ExtracaoCadastro(
             campos=CamposLicitacao(
@@ -181,13 +194,15 @@ def test_cadastro_com_analise_importada():
         db.commit()
         db.close()
 
-        with patch("app.analyzer.criar_analisador", return_value=AnalisadorFake()):
+        with patch("app.analyzer.criar_analisador", return_value=AnalisadorFake()), \
+             patch("app.database.SessionLocal", TestingSession):
             r = cliente.post(
                 f"/api/licitacoes/{lic4_id}/analise-arquivo",
                 files={"arquivo": ("analise.pdf", b"%PDF-1.4 conteudo", "application/pdf")},
             )
-        assert r.status_code == 200, r.text
-        atualizada = r.json()
+            job = aguardar_job(r)
+        assert job["status"] == "pronto", job
+        atualizada = job["resultado"]
         assert atualizada["analise"]["classificacao_final"] == "OPORTUNIDADE MODERADA"
         assert len(atualizada["analise"]["documentos_habilitacao"]) == 3
         # Campos vazios preenchidos pelo relatório; objeto original preservado
@@ -207,14 +222,16 @@ def test_cadastro_com_analise_importada():
         assert "Kendrea" in oport.notas and "BLL" in oport.notas
         db.close()
 
-        # PDF que não é relatório de análise -> 422 e nada é gravado
+        # PDF que não é relatório de análise -> job termina em erro 422 e nada é gravado
         extracao_fake.analise = None
-        with patch("app.analyzer.criar_analisador", return_value=AnalisadorFake()):
+        with patch("app.analyzer.criar_analisador", return_value=AnalisadorFake()), \
+             patch("app.database.SessionLocal", TestingSession):
             r = cliente.post(
                 f"/api/licitacoes/{lic2_id}/analise-arquivo",
                 files={"arquivo": ("edital.pdf", b"%PDF-1.4 edital", "application/pdf")},
             )
-        assert r.status_code == 422
+            job = aguardar_job(r)
+        assert job["status"] == "erro" and job["codigo"] == 422, job
         db = TestingSession()
         assert db.execute(
             select(Analise).where(Analise.licitacao_id == lic2_id)
