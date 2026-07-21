@@ -49,12 +49,14 @@ class AnalisadorEdital:
     def __init__(self):
         self.client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
 
-    def analisar(self, dados_licitacao: dict, perfil: dict, pdf_bytes: bytes | list[bytes] | None = None):
+    def analisar(self, dados_licitacao: dict, perfil: dict,
+                 pdf_bytes: bytes | list[bytes] | None = None,
+                 conteudo_link: str | None = None):
         """Analisa uma licitação. Retorna (ResultadoAnalise, usage).
 
         `pdf_bytes` aceita um PDF ou uma LISTA de PDFs (edital + termo de
-        referência + anexos) — os documentos de habilitação costumam estar nos
-        anexos, então a análise deve receber o conjunto completo.
+        referência + anexos). Regra de fonte: TEM documento? analisa o PDF;
+        NÃO tem? `conteudo_link` (conteúdo do link do certame) é a fonte.
         """
         pdfs = _normalizar_pdfs(pdf_bytes, MAX_PDF_BYTES)
 
@@ -71,7 +73,10 @@ class AnalisadorEdital:
         ]
         content.append({
             "type": "text",
-            "text": prompt_analise(perfil, dados_licitacao, tem_pdf=bool(pdfs)),
+            "text": prompt_analise(
+                perfil, dados_licitacao, tem_pdf=bool(pdfs),
+                conteudo_link=None if pdfs else conteudo_link,
+            ),
         })
 
         try:

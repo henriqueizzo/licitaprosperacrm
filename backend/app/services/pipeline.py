@@ -1,4 +1,5 @@
 """Pipeline: coleta -> deduplicação -> download do edital -> análise IA -> CRM."""
+import json
 import logging
 
 import httpx
@@ -166,8 +167,17 @@ def executar_analises(db: Session, limite: int = 10, licitacao_ids: list[int] | 
             pdf = PNCPCollector.baixar_documentos(lic.edital_url) or None
         elif lic.fonte == "manual" and lic.edital_url:
             pdf = _baixar_pdf_direto(lic.edital_url)
+
+        # Regra de fonte da análise: TEM documento? analisa o PDF. NÃO tem?
+        # considera o LINK do certame (página do portal + dados brutos da coleta).
+        conteudo_link = None
+        if not pdf:
+            pdf, conteudo_link = _fonte_pelo_link(lic)
+
         try:
-            resultado, usage = analisador.analisar(_dados(lic), perfil_dict, pdf)
+            resultado, usage = analisador.analisar(
+                _dados(lic), perfil_dict, pdf, conteudo_link=conteudo_link
+            )
         except ErroCotaIA as exc:
             # Cota/saldo do provedor esgotado: NÃO marca "erro" — a licitação continua
             # pendente e será analisada no próximo ciclo; interrompe o lote para não
@@ -275,6 +285,40 @@ def _baixar_pdf_direto(url: str) -> bytes | None:
     except Exception as exc:
         logger.warning("Falha ao baixar edital manual %s: %s", url, exc)
     return None
+
+
+def _fonte_pelo_link(lic: Licitacao) -> tuple[list[bytes] | None, str | None]:
+    """Fonte alternativa quando a licitação NÃO tem documento (PDF).
+
+    Regra do produto: sem documento, a análise considera o LINK do certame.
+    - Se o link apontar direto para um PDF, ele vira o documento da análise.
+    - Se for uma página, o HTML é reduzido a texto.
+    - Os dados brutos da coleta (raw_json — ex.: registro completo do PNCP)
+      complementam o texto, pois páginas de portal costumam ser apps JS com
+      pouco conteúdo estático.
+    Retorna (pdfs, conteudo_link) — no máximo um dos dois preenchido.
+    """
+    from .conteudo import baixar_conteudo
+
+    partes: list[str] = []
+    if lic.link:
+        texto, pdf_do_link = baixar_conteudo(lic.link)
+        if pdf_do_link:
+            logger.info("Licitação %s sem documento: link apontava para PDF, usando-o", lic.id)
+            return [pdf_do_link], None
+        if texto and len(texto) > 200:  # página com conteúdo real (não só shell de app JS)
+            partes.append(f"### Conteúdo da página do certame ({lic.link})\n{texto}")
+
+    if lic.raw_json:
+        try:
+            bruto = json.dumps(lic.raw_json, ensure_ascii=False)[:20000]
+            partes.append(f"### Registro bruto da fonte de coleta ({lic.fonte})\n{bruto}")
+        except Exception:  # raw_json inesperado nunca deve derrubar a análise
+            pass
+
+    if partes:
+        logger.info("Licitação %s sem documento: analisando pelo conteúdo do link/fonte", lic.id)
+    return None, "\n\n".join(partes) or None
 
 
 def _derivar_veredito(resultado) -> str:

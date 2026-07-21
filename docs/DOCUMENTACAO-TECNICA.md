@@ -338,6 +338,13 @@ análise (~104k tokens de entrada com PDFs grandes): Opus ~US$ 0,64 · Sonnet
    até `limite_analises=10` por execução (backlog grande precisa de vários ciclos).
    `ErroCotaIA` interrompe o lote sem queimar as pendentes.
 
+**Regra de fonte da análise** (cascata, em `executar_analises` + `_fonte_pelo_link`):
+1. **Tem documento?** → analisa os **PDFs** (edital + TR + anexos);
+2. **Não tem?** → considera o **link do certame**: se o link apontar direto para um
+   PDF, ele vira o documento; se for página, o HTML vira texto; os dados brutos da
+   coleta (`raw_json`) complementam (páginas de portal costumam ser apps JS);
+3. Sem nenhum dos dois → análise só com metadados (a IA sinaliza a limitação).
+
 Gatilhos: botão na UI (`manual`), APScheduler in-process (`agendador`, ~2 min após
 o startup e depois a cada 6 h) e cron externo (`cron`, via `POST
 /api/pipeline/executar-cron` com header `X-Cron-Token` — responde 202 e roda em
@@ -514,6 +521,7 @@ de `get_db` + `TestClient`; IA sempre mockada (nenhum teste consome cota).
 7. **Toda licitação coletada vira card** — não recriar gates por score.
 8. Exclusão de licitação **precisa** da lápide, senão a coleta recria.
 9. PNCP: horizonte de 45 dias em `dataFinal`, página máx. 50, retry em 429/500 (§3.7).
+9b. **Fonte da análise: tem documento → PDF; não tem → link do certame** (§3.9).
 10. O prompt oficial (`PROMPT_OFICIAL`) é da diretoria — mudanças só na camada
     `INSTRUCOES_SAIDA_ESTRUTURADA`.
 11. Design: consultar a skill `design-prospera` antes de mudar UI.

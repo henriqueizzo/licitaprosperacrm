@@ -58,19 +58,24 @@ class AnalisadorEditalGemini:
     def __init__(self):
         self.client = genai.Client(api_key=settings.gemini_api_key)
 
-    def analisar(self, dados_licitacao: dict, perfil: dict, pdf_bytes: bytes | list[bytes] | None = None):
+    def analisar(self, dados_licitacao: dict, perfil: dict,
+                 pdf_bytes: bytes | list[bytes] | None = None,
+                 conteudo_link: str | None = None):
         """Analisa uma licitação. Retorna (ResultadoAnalise, UsoIA).
 
         `pdf_bytes` aceita um PDF ou uma LISTA de PDFs (edital + termo de
-        referência + anexos) — os documentos de habilitação costumam estar nos
-        anexos, então a análise deve receber o conjunto completo.
+        referência + anexos). Regra de fonte: TEM documento? analisa o PDF;
+        NÃO tem? `conteudo_link` (conteúdo do link do certame) é a fonte.
         """
         pdfs = _normalizar_pdfs(pdf_bytes, MAX_PDF_BYTES)
 
         contents: list = [
             genai_types.Part.from_bytes(data=pdf, mime_type="application/pdf") for pdf in pdfs
         ]
-        contents.append(prompt_analise(perfil, dados_licitacao, tem_pdf=bool(pdfs)))
+        contents.append(prompt_analise(
+            perfil, dados_licitacao, tem_pdf=bool(pdfs),
+            conteudo_link=None if pdfs else conteudo_link,
+        ))
 
         # max_tokens folgado: análise completa + checklist integral de documentos
         response = self._gerar_com_retry(contents, max_tokens=32000)

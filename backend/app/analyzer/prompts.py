@@ -365,9 +365,15 @@ def prompt_extracao(texto: str | None, tem_pdf: bool) -> str:
     return "\n".join(partes)
 
 
-def prompt_analise(perfil: dict, dados_licitacao: dict, tem_pdf: bool) -> str:
+def prompt_analise(perfil: dict, dados_licitacao: dict, tem_pdf: bool,
+                   conteudo_link: str | None = None) -> str:
     """Monta o prompt do usuário com os dados da licitação (conteúdo volátil fica aqui,
-    fora do system prompt, para preservar o cache)."""
+    fora do system prompt, para preservar o cache).
+
+    Regra de fonte: TEM documento (PDF)? analisa o PDF. NÃO tem? `conteudo_link`
+    traz o que foi obtido do link do certame (página do portal e/ou dados brutos
+    da fonte) como fonte principal. Sem nenhum dos dois, análise só com metadados.
+    """
     restricoes = "\n".join(f"- {r}" for r in (perfil.get("restricoes") or [])) or "- (nenhuma cadastrada)"
     partes = [
         f"Data da Análise (data atual): {date.today().strftime('%d/%m/%Y')}",
@@ -395,6 +401,14 @@ def prompt_analise(perfil: dict, dados_licitacao: dict, tem_pdf: bool) -> str:
             "(edital, termo de referência, anexos, minuta de contrato). Analise TODOS "
             "em detalhe; exigências de documentos costumam estar espalhadas entre eles."
         )
+    elif conteudo_link:
+        partes.append(
+            "O edital em PDF NÃO está disponível. Abaixo está o conteúdo obtido do LINK "
+            "do certame (página do portal e/ou dados brutos da fonte de coleta) — use-o "
+            "como fonte principal junto com os dados acima. Sinalize explicitamente o que "
+            "só o edital completo confirmaria e seja conservador nos scores."
+        )
+        partes.append("## CONTEUDO DO LINK DO CERTAME\n" + conteudo_link[:60000])
     else:
         partes.append(
             "O edital completo NÃO está disponível — analise apenas com os dados acima, "

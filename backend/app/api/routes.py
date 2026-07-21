@@ -14,6 +14,7 @@ from ..models import Analise, DocumentoAnexo, Licitacao, Oportunidade, PerfilEmp
 from ..security import exigir_admin, usuario_atual
 from ..services import pipeline
 from ..services.atividade import eventos_recentes, registrar_evento, resumo_atividade
+from ..services.conteudo import baixar_conteudo as _baixar_conteudo
 from ..services.dashboard import montar_dashboard
 
 logger = logging.getLogger(__name__)
@@ -463,36 +464,6 @@ async def importar_analise_de_pdf(
     return _licitacao_out(lic, db)
 
 
-def _baixar_conteudo(url: str) -> tuple[str | None, bytes | None]:
-    """Baixa o link do usuário. Retorna (texto_da_pagina, pdf_bytes) — um dos dois."""
-    import httpx
-
-    try:
-        with httpx.Client(timeout=45, follow_redirects=True, headers={
-            "User-Agent": ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                           "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"),
-        }) as client:
-            resp = client.get(url)
-            resp.raise_for_status()
-    except Exception as exc:
-        logger.warning("Falha ao baixar link para extração %s: %s", url, exc)
-        return None, None
-
-    if resp.content[:5].startswith(b"%PDF"):
-        return None, resp.content if len(resp.content) <= 19 * 1024 * 1024 else None
-    return _html_para_texto(resp.text), None
-
-
-def _html_para_texto(html: str) -> str | None:
-    """Reduz HTML a texto puro (sem scripts/estilos) para a extração por IA."""
-    import html as html_lib
-    import re as re_lib
-
-    sem_blocos = re_lib.sub(r"(?is)<(script|style|noscript|svg)[^>]*>.*?</\1>", " ", html)
-    texto = re_lib.sub(r"(?s)<[^>]+>", " ", sem_blocos)
-    texto = html_lib.unescape(texto)
-    texto = re_lib.sub(r"\s+", " ", texto).strip()
-    return texto[:80000] or None
 
 
 @router.get("/licitacoes")
