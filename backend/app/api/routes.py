@@ -29,16 +29,18 @@ cron_router = APIRouter(prefix="/api")
 @cron_router.get("/saude")
 def saude():
     """Diagnóstico público mínimo (sem dados sensíveis): o processo está de pé,
-    qual provedor de IA está ativo e qual commit está rodando (RENDER_GIT_COMMIT,
-    setado pelo Render) — permite confirmar de fora que um deploy backend-only
-    chegou ao processo."""
+    qual provedor de IA está ativo e qual commit está rodando — permite confirmar
+    de fora que um deploy chegou ao processo. O commit vem de RENDER_GIT_COMMIT
+    (Render) ou APP_COMMIT (infra própria — a pipeline seta, ex.:
+    APP_COMMIT=$BITBUCKET_COMMIT)."""
     import os
 
     from ..analyzer import provedor_ativo
+    commit = os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("APP_COMMIT", "")
     return {
         "ok": True,
         "ia_provider": provedor_ativo() or "nenhum",
-        "commit": os.environ.get("RENDER_GIT_COMMIT", "")[:7],
+        "commit": commit[:7],
     }
 
 

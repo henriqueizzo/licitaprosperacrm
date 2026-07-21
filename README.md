@@ -4,7 +4,8 @@ CRM integrado a portais de licitações públicas com análise de editais por IA
 
 > 📘 **Documentação completa para desenvolvedores:** [docs/DOCUMENTACAO-TECNICA.md](docs/DOCUMENTACAO-TECNICA.md)
 > (contexto do negócio, arquitetura, modelo de dados, coletores, IA, deploy, lições e roadmap).
-> Guia de infraestrutura passo a passo: [DEPLOY.md](DEPLOY.md).
+> 🚚 **Migração para a infra da Prospera (EC2 + RDS + Bitbucket):** [docs/MIGRACAO-INFRA-PROSPERA.md](docs/MIGRACAO-INFRA-PROSPERA.md).
+> Guia da stack atual (Render/Supabase): [DEPLOY.md](DEPLOY.md).
 
 ## Fluxo
 
