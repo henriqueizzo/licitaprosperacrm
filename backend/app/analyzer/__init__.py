@@ -5,7 +5,7 @@ No modo auto, usa o Gemini se GEMINI_API_KEY estiver configurada (nível gratuit
 senão o Claude se ANTHROPIC_API_KEY estiver configurada.
 """
 from ..config import settings
-from .schemas import CLASSIFICACOES, ErroCotaIA, ResultadoAnalise, UsoIA  # noqa: F401
+from .schemas import CLASSIFICACOES, ErroCotaIA, ErroEntradaIA, ResultadoAnalise, UsoIA  # noqa: F401
 
 
 def provedor_ativo() -> str | None:

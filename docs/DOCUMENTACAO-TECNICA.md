@@ -526,6 +526,13 @@ de `get_db` + `TestClient`; IA sempre mockada (nenhum teste consome cota).
     `INSTRUCOES_SAIDA_ESTRUTURADA`.
 11. Design: consultar a skill `design-prospera` antes de mudar UI.
 12. Commits: mensagens sem acento (histórico em ASCII por causa do PowerShell 5.1).
+13. **Erros da IA têm tipo, não `except` genérico**: `ErroCotaIA` (cota/saldo →
+    503, licitação segue pendente), `ErroEntradaIA` (provedor rejeitou o
+    documento, erro 400 → 422 sem "tente novamente") e `RuntimeError` (transitório
+    → 503 "tente novamente"). Com o retry interno do SDK do Gemini desligado,
+    erros de rede (`httpx.HTTPError`) chegam crus — o `_gerar_com_retry` os trata
+    como 5xx (retry curto + fallback de modelo). Mensagem do 500 genérico inclui
+    a classe da exceção para diagnóstico pela tela do usuário (`tests/test_ia_erros.py`).
 
 ### 3.16 Sugestões de evolução (backlog técnico)
 

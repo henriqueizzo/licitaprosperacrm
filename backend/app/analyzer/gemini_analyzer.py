@@ -11,13 +11,14 @@ pipeline manter as licitações pendentes e tentar no ciclo seguinte.
 import logging
 import time
 
+import httpx
 from google import genai
 from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 
 from ..config import settings
 from .prompts import SYSTEM_ANALISTA, SYSTEM_EXTRACAO, prompt_analise, prompt_extracao
-from .schemas import ErroCotaIA, ExtracaoCadastro, ResultadoAnalise, UsoIA
+from .schemas import ErroCotaIA, ErroEntradaIA, ExtracaoCadastro, ResultadoAnalise, UsoIA
 
 logger = logging.getLogger(__name__)
 
@@ -195,6 +196,15 @@ class AnalisadorEditalGemini:
                         break
                     if exc.code in (401, 403):
                         raise ErroCotaIA(f"Chave do Gemini inválida ou sem permissão ({exc.code}).") from exc
+                    if exc.code == 400:
+                        # O Gemini rejeitou a ENTRADA (tipicamente o PDF): erro
+                        # permanente — repetir com o mesmo arquivo não resolve.
+                        logger.warning("Gemini rejeitou a entrada (400): %s", exc)
+                        raise ErroEntradaIA(
+                            "A IA não conseguiu ler o documento enviado — o PDF pode estar "
+                            "corrompido, protegido por senha ou em formato não suportado. "
+                            "Reexporte o PDF (imprimir → salvar como PDF) ou cole o resumo."
+                        ) from exc
                     if exc.code and exc.code >= 500:
                         if tentativas_5xx < len(esperas_5xx):
                             espera = esperas_5xx[tentativas_5xx]
@@ -207,12 +217,34 @@ class AnalisadorEditalGemini:
                         ultima_5xx = exc
                         break  # próximo modelo da lista
                     raise
+                except httpx.HTTPError as exc:
+                    # Falha de rede/transporte crua: com o retry interno do SDK
+                    # desligado (attempts=1), timeouts e conexões derrubadas chegam
+                    # aqui — trata como indisponibilidade transitória (mesma
+                    # política dos 5xx: espera curta e depois próximo modelo).
+                    if tentativas_5xx < len(esperas_5xx):
+                        espera = esperas_5xx[tentativas_5xx]
+                        tentativas_5xx += 1
+                        logger.warning("Falha de rede com o Gemini (%s), aguardando %ds",
+                                       type(exc).__name__, espera)
+                        time.sleep(espera)
+                        continue
+                    logger.warning("Rede com o Gemini segue falhando (%s); tentando próximo modelo",
+                                   type(exc).__name__)
+                    ultima_5xx = exc
+                    break  # próximo modelo da lista
         if cota_esgotada is not None:
             raise ErroCotaIA(
                 "Cota do Gemini esgotada (429 persistente — provável limite diário do "
                 "nível gratuito). As análises continuam no próximo ciclo."
             ) from cota_esgotada
-        raise ultima_5xx  # todos os modelos indisponíveis (transitório — próximo ciclo resolve)
+        # Todos os modelos indisponíveis (5xx ou rede) — transitório: RuntimeError
+        # vira 503 "tente novamente" nas rotas interativas e "erro" reenfileirável
+        # no pipeline.
+        raise RuntimeError(
+            "IA indisponível no momento (sobrecarga ou falha de conexão) — "
+            "tente novamente em instantes."
+        ) from ultima_5xx
 
     def _gerar(self, modelo: str, contents: list, system: str, schema, max_tokens: int,
                thinking_budget: int | None = None):

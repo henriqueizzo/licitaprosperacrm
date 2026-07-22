@@ -24,6 +24,15 @@ class ErroCotaIA(Exception):
     """
 
 
+class ErroEntradaIA(Exception):
+    """O provedor de IA rejeitou a ENTRADA (ex.: PDF corrompido, protegido por
+    senha ou em formato que ele não lê) — erro 400 do provedor.
+
+    Erro permanente do documento: repetir a mesma chamada não resolve. Quem
+    chama deve devolver a mensagem ao usuário (422) em vez de "tente novamente".
+    """
+
+
 @dataclass
 class UsoIA:
     """Uso de tokens normalizado entre provedores (mesma interface do usage da Anthropic)."""

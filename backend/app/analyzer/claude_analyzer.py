@@ -17,6 +17,7 @@ from .schemas import (  # noqa: F401 (reexport legado)
     CLASSIFICACOES,
     CamposLicitacao,
     ErroCotaIA,
+    ErroEntradaIA,
     ExtracaoCadastro,
     ResultadoAnalise,
 )
@@ -127,6 +128,13 @@ class AnalisadorEdital:
         except anthropic.BadRequestError as exc:
             if "credit balance" in str(exc.message).lower():
                 raise ErroCotaIA("Créditos da API Anthropic esgotados.") from exc
+            if pdf_bytes:
+                # 400 com PDF anexado = documento que a API não conseguiu processar
+                raise ErroEntradaIA(
+                    "A IA não conseguiu ler o documento enviado — o PDF pode estar "
+                    "corrompido, protegido por senha ou em formato não suportado. "
+                    "Reexporte o PDF (imprimir → salvar como PDF) ou cole o resumo."
+                ) from exc
             raise
         except anthropic.RateLimitError as exc:
             raise ErroCotaIA("Rate limit da API Anthropic persistente.") from exc

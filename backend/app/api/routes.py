@@ -313,7 +313,7 @@ def extrair_campos_licitacao(
     provedor de IA ativo para devolver os campos estruturados — o usuário revisa
     antes de cadastrar.
     """
-    from ..analyzer import ErroCotaIA, criar_analisador
+    from ..analyzer import ErroCotaIA, ErroEntradaIA, criar_analisador
 
     texto = dados.texto.strip()
     url = dados.url.strip()
@@ -335,6 +335,8 @@ def extrair_campos_licitacao(
 
     try:
         extracao = criar_analisador().extrair(texto=texto or None, pdf_bytes=pdf)
+    except ErroEntradaIA as exc:
+        raise HTTPException(422, str(exc))
     except ErroCotaIA as exc:
         raise HTTPException(503, f"IA indisponível no momento: {exc}")
     except RuntimeError as exc:
@@ -367,7 +369,7 @@ _JOB_TTL_SEGUNDOS = 30 * 60
 
 
 def _iniciar_job(trabalho) -> str:
-    from ..analyzer import ErroCotaIA
+    from ..analyzer import ErroCotaIA, ErroEntradaIA
 
     corte = _time.time() - _JOB_TTL_SEGUNDOS
     with _JOBS_LOCK:
@@ -383,14 +385,20 @@ def _iniciar_job(trabalho) -> str:
             atual = {"status": "pronto", "resultado": trabalho()}
         except HTTPException as exc:
             atual = {"status": "erro", "codigo": exc.status_code, "erro": exc.detail}
+        except ErroEntradaIA as exc:
+            # Documento rejeitado pelo provedor: erro permanente — sem "tente novamente"
+            atual = {"status": "erro", "codigo": 422, "erro": str(exc)}
         except ErroCotaIA as exc:
             atual = {"status": "erro", "codigo": 503, "erro": f"IA indisponível no momento: {exc}"}
         except RuntimeError as exc:
             atual = {"status": "erro", "codigo": 503, "erro": str(exc)}
-        except Exception:
+        except Exception as exc:
             logger.exception("Job de extração %s falhou", job_id)
+            # O nome da exceção na mensagem permite diagnosticar pela tela do
+            # usuário (print) mesmo sem acesso aos logs de produção.
             atual = {"status": "erro", "codigo": 500,
-                     "erro": "Falha inesperada na leitura do PDF — tente novamente."}
+                     "erro": f"Falha inesperada na leitura do PDF ({type(exc).__name__}) "
+                             "— tente novamente."}
         with _JOBS_LOCK:
             _JOBS[job_id].update(atual)
 
