@@ -533,6 +533,13 @@ de `get_db` + `TestClient`; IA sempre mockada (nenhum teste consome cota).
     erros de rede (`httpx.HTTPError`) chegam crus — o `_gerar_com_retry` os trata
     como 5xx (retry curto + fallback de modelo). Mensagem do 500 genérico inclui
     a classe da exceção para diagnóstico pela tela do usuário (`tests/test_ia_erros.py`).
+14. **Alias `-latest` do Gemini muda de modelo sem aviso** — e o modelo novo pode
+    rejeitar parâmetros antigos com `400 INVALID_ARGUMENT` genérico (caso real
+    22/07: `thinking_budget=0` derrubou TODA extração por PDF da noite pro dia).
+    Defesas em camadas: `_gerar` repete a chamada sem `thinking_budget` ao tomar
+    400 e memoriza o modelo (`_MODELOS_SEM_THINKING_BUDGET`); se o provedor
+    rejeitar o PDF em si, `_extrair_com_reserva_de_texto` (routes.py) refaz a
+    extração com o texto do pypdf. Parâmetro novo de IA = sempre prever o 400.
 
 ### 3.16 Sugestões de evolução (backlog técnico)
 

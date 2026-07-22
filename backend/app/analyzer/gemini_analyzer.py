@@ -35,6 +35,12 @@ ESPERAS_5XX = [15, 45]
 # que tem mais capacidade ociosa no nível gratuito
 MODELOS_FALLBACK = ["gemini-flash-lite-latest"]
 
+# Aliases "-latest" podem passar a apontar, sem aviso, para um modelo que rejeita
+# thinking_budget com 400 INVALID_ARGUMENT (caso real: TODA extração por PDF
+# quebrou em 22/07 quando o alias mudou). Modelo que rejeitar entra aqui e as
+# chamadas seguintes do processo já saem sem o parâmetro.
+_MODELOS_SEM_THINKING_BUDGET: set[str] = set()
+
 
 def _normalizar_pdfs(pdf_bytes: bytes | list[bytes] | None, teto: int) -> list[bytes]:
     """Aceita PDF único ou lista; descarta o que estourar o teto conjunto do provedor."""
@@ -256,10 +262,27 @@ class AnalisadorEditalGemini:
         if schema is not None:
             config.response_mime_type = "application/json"
             config.response_schema = schema
-        if thinking_budget is not None:
+        usar_thinking = thinking_budget is not None and modelo not in _MODELOS_SEM_THINKING_BUDGET
+        if usar_thinking:
             config.thinking_config = genai_types.ThinkingConfig(thinking_budget=thinking_budget)
-        return self.client.models.generate_content(
-            model=modelo,
-            contents=contents,
-            config=config,
-        )
+        try:
+            return self.client.models.generate_content(
+                model=modelo,
+                contents=contents,
+                config=config,
+            )
+        except genai_errors.APIError as exc:
+            if exc.code == 400 and usar_thinking:
+                # O modelo por trás do alias rejeita thinking_budget: repete a
+                # MESMA chamada sem o parâmetro e memoriza para as próximas.
+                logger.warning(
+                    "Modelo %s rejeitou thinking_budget (400); repetindo sem o parâmetro", modelo
+                )
+                _MODELOS_SEM_THINKING_BUDGET.add(modelo)
+                config.thinking_config = None
+                return self.client.models.generate_content(
+                    model=modelo,
+                    contents=contents,
+                    config=config,
+                )
+            raise

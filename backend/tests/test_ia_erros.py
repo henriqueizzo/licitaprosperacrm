@@ -86,6 +86,43 @@ def test_429_persistente_segue_como_cota():
     print("OK: 429 persistente segue virando ErroCotaIA")
 
 
+def test_thinking_budget_rejeitado_repete_sem():
+    """Alias -latest apontando p/ modelo que rejeita thinking_budget (400):
+    repete a chamada sem o parâmetro e memoriza (caso real de 22/07 — toda
+    extração por PDF quebrou quando o Google trocou o modelo do alias)."""
+    from app.analyzer import gemini_analyzer as ga
+
+    class FakeModels:
+        def __init__(self):
+            self.thinking_das_chamadas = []
+
+        def generate_content(self, model, contents, config):
+            self.thinking_das_chamadas.append(config.thinking_config)
+            if config.thinking_config is not None:
+                raise _erro_api(400)
+            return "resposta"
+
+    ga._MODELOS_SEM_THINKING_BUDGET.clear()
+    try:
+        analisador = AnalisadorEditalGemini.__new__(AnalisadorEditalGemini)
+        fake = FakeModels()
+        analisador.client = type("FakeClient", (), {"models": fake})()
+
+        r = analisador._gerar("modelo-x", ["oi"], "sys", None, 100, thinking_budget=0)
+        assert r == "resposta"
+        assert fake.thinking_das_chamadas[0] is not None  # tentou com thinking
+        assert fake.thinking_das_chamadas[1] is None      # repetiu sem
+        assert "modelo-x" in ga._MODELOS_SEM_THINKING_BUDGET
+
+        # chamada seguinte já sai direto sem thinking (não paga o 400 de novo)
+        r = analisador._gerar("modelo-x", ["oi"], "sys", None, 100, thinking_budget=0)
+        assert r == "resposta"
+        assert len(fake.thinking_das_chamadas) == 3 and fake.thinking_das_chamadas[2] is None
+    finally:
+        ga._MODELOS_SEM_THINKING_BUDGET.clear()
+    print("OK: modelo que rejeita thinking_budget repete sem o parâmetro e memoriza")
+
+
 def test_pdf_rejeitado_cai_para_texto_local():
     """Se o provedor rejeitar o binário do PDF (400), a extração refaz com o
     texto extraído localmente (pypdf); sem texto aproveitável, mantém o 422."""
@@ -145,6 +182,7 @@ if __name__ == "__main__":
     test_erro_de_rede_persistente_vira_runtime_error()
     test_erro_de_rede_transitorio_e_absorvido()
     test_429_persistente_segue_como_cota()
+    test_thinking_budget_rejeitado_repete_sem()
     test_pdf_rejeitado_cai_para_texto_local()
     test_job_mapeia_erros()
     print("\nTodos os testes passaram.")
