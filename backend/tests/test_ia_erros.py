@@ -86,6 +86,41 @@ def test_429_persistente_segue_como_cota():
     print("OK: 429 persistente segue virando ErroCotaIA")
 
 
+def test_pdf_rejeitado_cai_para_texto_local():
+    """Se o provedor rejeitar o binário do PDF (400), a extração refaz com o
+    texto extraído localmente (pypdf); sem texto aproveitável, mantém o 422."""
+    from unittest.mock import patch
+
+    from app.api import routes
+
+    class FakeAnalisador:
+        def __init__(self):
+            self.chamadas = []
+
+        def extrair(self, texto=None, pdf_bytes=None):
+            self.chamadas.append((texto, pdf_bytes))
+            if pdf_bytes is not None:
+                raise ErroEntradaIA("PDF rejeitado")
+            return f"extracao-do-texto:{texto[:10]}"
+
+    fake = FakeAnalisador()
+    with patch("app.analyzer.criar_analisador", lambda: fake), \
+         patch.object(routes, "_texto_do_pdf", lambda b: "conteudo do relatorio " * 20):
+        resultado = routes._extrair_com_reserva_de_texto(None, b"%PDF-falso")
+    assert resultado.startswith("extracao-do-texto:"), resultado
+    assert len(fake.chamadas) == 2 and fake.chamadas[1][1] is None
+
+    fake_sem_texto = FakeAnalisador()
+    with patch("app.analyzer.criar_analisador", lambda: fake_sem_texto), \
+         patch.object(routes, "_texto_do_pdf", lambda b: ""):
+        try:
+            routes._extrair_com_reserva_de_texto(None, b"%PDF-falso")
+            raise AssertionError("deveria manter ErroEntradaIA")
+        except ErroEntradaIA:
+            pass
+    print("OK: PDF rejeitado cai para o texto do pypdf; sem texto, mantém o erro claro")
+
+
 def test_job_mapeia_erros():
     from app.api.routes import _JOBS, _iniciar_job
 
@@ -110,5 +145,6 @@ if __name__ == "__main__":
     test_erro_de_rede_persistente_vira_runtime_error()
     test_erro_de_rede_transitorio_e_absorvido()
     test_429_persistente_segue_como_cota()
+    test_pdf_rejeitado_cai_para_texto_local()
     test_job_mapeia_erros()
     print("\nTodos os testes passaram.")

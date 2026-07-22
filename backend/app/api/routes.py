@@ -313,7 +313,7 @@ def extrair_campos_licitacao(
     provedor de IA ativo para devolver os campos estruturados — o usuário revisa
     antes de cadastrar.
     """
-    from ..analyzer import ErroCotaIA, ErroEntradaIA, criar_analisador
+    from ..analyzer import ErroCotaIA, ErroEntradaIA
 
     texto = dados.texto.strip()
     url = dados.url.strip()
@@ -334,7 +334,7 @@ def extrair_campos_licitacao(
                 )
 
     try:
-        extracao = criar_analisador().extrair(texto=texto or None, pdf_bytes=pdf)
+        extracao = _extrair_com_reserva_de_texto(texto or None, pdf)
     except ErroEntradaIA as exc:
         raise HTTPException(422, str(exc))
     except ErroCotaIA as exc:
@@ -441,6 +441,28 @@ def _completar_analise_importada(extracao, texto_fonte: str) -> None:
         extracao.analise.analise_completa = texto_fonte or "(texto do documento indisponível)"
 
 
+def _extrair_com_reserva_de_texto(texto: str | None, pdf: bytes | None):
+    """Extração via IA com plano B: se o provedor rejeitar o PDF (400 —
+    ErroEntradaIA), refaz a chamada com o TEXTO extraído localmente (pypdf).
+
+    Relatórios de análise e editais são PDFs de texto — seguem funcionando
+    mesmo quando o binário não é aceito pelo provedor (caso real: Gemini
+    rejeitou o PDF de análise da Autarquia Água de Ivoti-RS). O ErroEntradaIA
+    só chega ao usuário quando o PDF não tem texto aproveitável (escaneado
+    sem OCR, protegido por senha, corrompido)."""
+    from ..analyzer import ErroEntradaIA, criar_analisador
+
+    analisador = criar_analisador()
+    try:
+        return analisador.extrair(texto=texto, pdf_bytes=pdf)
+    except ErroEntradaIA:
+        texto_pdf = _texto_do_pdf(pdf) if pdf else ""
+        if len(texto_pdf.strip()) < 200:
+            raise
+        logger.warning("Provedor de IA rejeitou o PDF; refazendo a extração com o texto local (pypdf)")
+        return analisador.extrair(texto=f"{texto}\n\n{texto_pdf}" if texto else texto_pdf)
+
+
 @router.post("/licitacoes/extrair-arquivo", status_code=202)
 async def extrair_campos_de_pdf(
     arquivo: UploadFile,
@@ -461,9 +483,7 @@ async def extrair_campos_de_pdf(
     registrar_evento(db, usuario, "extracao_cadastro", detalhe=f"pdf: {arquivo.filename or ''}"[:300])
 
     def trabalho():
-        from ..analyzer import criar_analisador
-
-        extracao = criar_analisador().extrair(pdf_bytes=conteudo)
+        extracao = _extrair_com_reserva_de_texto(None, conteudo)
         _completar_analise_importada(extracao, _texto_do_pdf(conteudo))
         out = extracao.campos.model_dump()
         out["analise"] = extracao.analise.model_dump() if extracao.analise else None
@@ -499,10 +519,9 @@ async def importar_analise_de_pdf(
     nome_arquivo = arquivo.filename or ""
 
     def trabalho():
-        from ..analyzer import criar_analisador
         from ..database import SessionLocal
 
-        extracao = criar_analisador().extrair(pdf_bytes=conteudo)
+        extracao = _extrair_com_reserva_de_texto(None, conteudo)
         if extracao.analise is None:
             raise HTTPException(
                 422,
