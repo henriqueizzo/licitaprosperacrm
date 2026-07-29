@@ -182,6 +182,9 @@ class LicitacaoManualIn(BaseModel):
     # (formato ResultadoAnalise). Quando presente, é gravada como análise da
     # licitação — habilita o checklist de Documentação sem reanálise IA.
     analise: dict | None = None
+    # Checklist extraído do EDITAL no preenchimento automático (quando o anexo
+    # não é um relatório de análise). Ignorado se `analise` vier junto.
+    documentos_habilitacao: list | None = None
 
 
 @router.post("/licitacoes", status_code=201)
@@ -238,6 +241,8 @@ def criar_licitacao_manual(
 
     if dados.analise:
         _gravar_analise_importada(db, lic, dados.analise)
+    elif dados.documentos_habilitacao:
+        _gravar_checklist_importado(db, lic, dados.documentos_habilitacao)
 
     registrar_evento(db, usuario, "cadastro_manual", licitacao_id=lic.id, detalhe=lic.objeto[:200])
 
@@ -290,6 +295,44 @@ def _gravar_analise_importada(db: Session, lic: Licitacao, analise_bruta: dict) 
         tokens_saida=0,
     ))
     lic.status_analise = "analisada"
+    db.commit()
+    return True
+
+
+def _gravar_checklist_importado(db: Session, lic: Licitacao, documentos: list) -> bool:
+    """Grava um checklist de documentação extraído do EDITAL no cadastro manual.
+
+    Cria uma análise só com `documentos_habilitacao` — o suficiente para o módulo
+    de Documentação funcionar como no fluxo automático. Sem scores/classificação:
+    o cartão fica sem badge e a licitação segue com status 'manual' (a análise
+    completa do edital não foi feita). Payload inválido não derruba o cadastro.
+    """
+    from ..analyzer.schemas import DocumentoHabilitacao
+
+    try:
+        checklist = [DocumentoHabilitacao.model_validate(d).model_dump() for d in documentos]
+    except Exception as exc:
+        logger.warning("Checklist importado inválido para a licitação %s: %s", lic.id, exc)
+        return False
+    if not checklist:
+        return False
+
+    # Reaproveitamento de cadastro pela metade: descarta análise anterior
+    for antiga in db.execute(select(Analise).where(Analise.licitacao_id == lic.id)).scalars():
+        db.delete(antiga)
+
+    db.add(Analise(
+        licitacao_id=lic.id,
+        score=0,
+        veredito="revisar_manual",
+        justificativa=(
+            "Checklist de documentação extraído do edital no cadastro manual. "
+            "A análise estratégica completa não foi realizada."
+        ),
+        documentos_habilitacao=checklist,
+        tokens_entrada=0,
+        tokens_saida=0,
+    ))
     db.commit()
     return True
 
@@ -348,6 +391,7 @@ def extrair_campos_licitacao(
     out = extracao.campos.model_dump()
     out["link"] = url or extracao.campos.link
     out["analise"] = extracao.analise.model_dump() if extracao.analise else None
+    out["documentos_habilitacao"] = _checklist_extraido(extracao)
     return out
 
 
@@ -441,6 +485,14 @@ def _completar_analise_importada(extracao, texto_fonte: str) -> None:
         extracao.analise.analise_completa = texto_fonte or "(texto do documento indisponível)"
 
 
+def _checklist_extraido(extracao) -> list:
+    """Checklist de documentos extraído do EDITAL — só vale quando não há análise
+    transcrita (o checklist da análise tem precedência)."""
+    if extracao.analise is not None:
+        return []
+    return [d.model_dump() for d in extracao.documentos_habilitacao]
+
+
 def _extrair_com_reserva_de_texto(texto: str | None, pdf: bytes | None):
     """Extração via IA com plano B: se o provedor rejeitar o PDF (400 —
     ErroEntradaIA), refaz a chamada com o TEXTO extraído localmente (pypdf).
@@ -487,6 +539,7 @@ async def extrair_campos_de_pdf(
         _completar_analise_importada(extracao, _texto_do_pdf(conteudo))
         out = extracao.campos.model_dump()
         out["analise"] = extracao.analise.model_dump() if extracao.analise else None
+        out["documentos_habilitacao"] = _checklist_extraido(extracao)
         return out
 
     return {"job_id": _iniciar_job(trabalho)}

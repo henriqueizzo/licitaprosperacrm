@@ -159,3 +159,12 @@ class ExtracaoCadastro(BaseModel):
             "classificação). null quando for apenas um edital/aviso sem análise."
         ),
     )
+    documentos_habilitacao: list[DocumentoHabilitacao] = Field(
+        default_factory=list,
+        description=(
+            "Checklist de documentos de habilitação extraído do EDITAL, quando o "
+            "documento NÃO é um relatório de análise (analise=null) mas traz exigências "
+            "documentais. Vazio quando a análise foi transcrita (o checklist dela vale) "
+            "ou quando o conteúdo não traz exigências."
+        ),
+    )

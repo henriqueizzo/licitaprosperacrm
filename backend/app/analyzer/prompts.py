@@ -300,7 +300,8 @@ Você extrai dados cadastrais de licitações públicas brasileiras a partir de 
 DE EDITAL produzido pelo time da Prospera (documento que começa com "TABELAS DE DADOS
 DO CERTAME" e contém tabela de documentos para habilitação, scores e classificação).
 
-A saída tem duas partes: `campos` (cadastro) e `analise` (análise estruturada).
+A saída tem três partes: `campos` (cadastro), `analise` (análise estruturada) e
+`documentos_habilitacao` (checklist extraído do edital quando NÃO há análise).
 
 REGRAS PARA `campos` (sempre preencher):
 - Preencha somente o que estiver explícito no conteúdo; NÃO invente nada.
@@ -353,6 +354,25 @@ REGRAS PARA `analise`:
 - analise_completa: deixe como STRING VAZIA (""). NÃO transcreva o documento — o
   sistema preenche este campo com o texto do próprio arquivo. Isso é essencial
   para a resposta ser rápida.
+
+REGRAS PARA `documentos_habilitacao` (nível raiz, fora de `analise`):
+- Preencha SOMENTE quando `analise` for null (o documento é um edital, aviso ou
+  resumo — não um relatório de análise) E o conteúdo trouxer exigências de
+  documentos de habilitação/credenciamento. Quando `analise` estiver preenchida,
+  deixe esta lista VAZIA (o checklist da análise transcrita já vale).
+- Este checklist vira o CONTROLE OPERACIONAL DE ENVIO da equipe — se um documento
+  faltar aqui, o time NÃO o envia e a empresa é INABILITADA. Seja EXAUSTIVO:
+  - Varra a seção de habilitação/credenciamento item por item (cada subitem
+    "a.1", "b.2", … vira um item da lista; NUNCA resuma vários documentos em um só).
+  - Varra TAMBÉM o restante do documento: declarações exigidas em anexos-modelo,
+    garantias, atestados, propostas, termos de ciência — tudo que a empresa
+    precise apresentar em qualquer fase entra na lista.
+- Cada item: categoria (exatamente uma das 5 permitidas — se a exigência não se
+  encaixar, use "OUTROS DOCUMENTOS / DECLARAÇÕES"), documento (nome objetivo, sem
+  o marcador "[ ]") e referencia_edital (item/cláusula/página, ou "Não informado
+  no edital").
+- Lista vazia se o conteúdo não trouxer nenhuma exigência documental (ex.: resumo
+  curto sem seção de habilitação). NÃO invente documentos que não constam.
 """
 
 
@@ -360,7 +380,9 @@ def prompt_extracao(texto: str | None, tem_pdf: bool) -> str:
     partes = [
         "Extraia os campos cadastrais da licitação a partir do conteúdo abaixo. "
         "Se o conteúdo for um relatório de análise de edital, transcreva também a "
-        "análise estruturada (campo `analise`); caso contrário deixe `analise` null."
+        "análise estruturada (campo `analise`); caso contrário deixe `analise` null "
+        "e extraia o checklist de documentos de habilitação do edital no campo "
+        "`documentos_habilitacao` (nível raiz)."
     ]
     if tem_pdf:
         partes.append("O documento está anexado como PDF — use-o como fonte principal.")

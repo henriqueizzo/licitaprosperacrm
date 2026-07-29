@@ -134,6 +134,57 @@ def test_cadastro_com_analise_importada():
         ).scalar_one_or_none() is None
         db.close()
 
+        # --- cadastro com CHECKLIST extraído do edital (sem análise completa) ---
+        r = cliente.post("/api/licitacoes", json={
+            "objeto": "Licitação manual com checklist do edital", "numero_certame": "022/2026",
+            "documentos_habilitacao": [
+                {"categoria": "HABILITAÇÃO JURÍDICA", "documento": "Ato constitutivo",
+                 "referencia_edital": "Item 9.1"},
+                {"categoria": "REGULARIDADE FISCAL E TRABALHISTA", "documento": "CNDT",
+                 "referencia_edital": "Item 9.2"},
+            ],
+        })
+        assert r.status_code == 201, r.text
+        lic5_id = r.json()["id"]
+        db = TestingSession()
+        assert db.get(Licitacao, lic5_id).status_analise == "manual"  # análise completa não feita
+        a5 = db.execute(select(Analise).where(Analise.licitacao_id == lic5_id)).scalar_one()
+        assert len(a5.documentos_habilitacao) == 2
+        assert a5.classificacao_final == ""  # sem badge de classificação no cartão
+        db.close()
+        r = cliente.get(f"/api/licitacoes/{lic5_id}/documentos")
+        assert r.status_code == 200
+        assert r.json()["tem_checklist"] is True
+        assert [i["documento"] for i in r.json()["checklist"]] == ["Ato constitutivo", "CNDT"]
+
+        # checklist inválido NÃO derruba o cadastro (fica sem checklist)
+        r = cliente.post("/api/licitacoes", json={
+            "objeto": "Checklist quebrado", "numero_certame": "023/2026",
+            "documentos_habilitacao": [{"categoria": "CATEGORIA INEXISTENTE", "documento": "X"}],
+        })
+        assert r.status_code == 201
+        db = TestingSession()
+        assert db.execute(select(Analise).where(
+            Analise.licitacao_id == r.json()["id"])).scalar_one_or_none() is None
+        db.close()
+
+        # análise importada tem precedência sobre o checklist avulso
+        r = cliente.post("/api/licitacoes", json={
+            "objeto": "Análise + checklist juntos", "numero_certame": "024/2026",
+            "analise": ANALISE_IMPORTADA,
+            "documentos_habilitacao": [
+                {"categoria": "HABILITAÇÃO JURÍDICA", "documento": "Não deve valer",
+                 "referencia_edital": "-"},
+            ],
+        })
+        assert r.status_code == 201
+        db = TestingSession()
+        a6 = db.execute(select(Analise).where(
+            Analise.licitacao_id == r.json()["id"])).scalar_one()
+        assert len(a6.documentos_habilitacao) == 3  # veio da análise, não do checklist avulso
+        assert a6.classificacao_final == "OPORTUNIDADE MODERADA"
+        db.close()
+
         # --- análise inválida NÃO derruba o cadastro (fica sem análise) ---
         r = cliente.post("/api/licitacoes", json={
             "objeto": "Licitação com análise quebrada", "numero_certame": "021/2026",
@@ -252,7 +303,8 @@ def test_cadastro_com_analise_importada():
         r = cliente.get(f"/api/licitacoes/{lic_id}/documentos")
         assert r.status_code == 200
 
-        print("OK - cadastro com análise, sem análise, análise inválida, importação por PDF e duplicata")
+        print("OK - cadastro com análise, sem análise, checklist do edital, análise inválida, "
+              "importação por PDF e duplicata")
     finally:
         if override_anterior:
             app.dependency_overrides[get_db] = override_anterior

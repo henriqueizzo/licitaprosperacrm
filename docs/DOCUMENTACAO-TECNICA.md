@@ -285,14 +285,20 @@ Ambos implementam a mesma interface:
 | Método | Uso | Retorno |
 |---|---|---|
 | `analisar(dados, perfil, pdfs)` | análise completa do edital (pipeline) | `(ResultadoAnalise, UsoIA)` |
-| `extrair(texto=, pdf_bytes=)` | preenchimento automático do cadastro + importação de análise | `ExtracaoCadastro {campos, analise?}` |
+| `extrair(texto=, pdf_bytes=)` | preenchimento automático do cadastro + importação de análise | `ExtracaoCadastro {campos, analise?, documentos_habilitacao}` |
 | `redigir(instrucao, system)` | texto corrido (declarações Word) | `str` |
 
 - `analisar` aceita `bytes` **ou `list[bytes]`** (edital + TR + anexos).
-- `extrair` reconhece dois tipos de documento: edital comum (só `campos`) ou
-  **relatório de análise do time** (estrutura do prompt oficial) — nesse caso
-  TRANSCREVE a análise para `analise` (sem re-analisar). É o que alimenta o botão
-  "Anexar análise (PDF)" e o cadastro manual.
+- `extrair` reconhece dois tipos de documento: **relatório de análise do time**
+  (estrutura do prompt oficial) — nesse caso TRANSCREVE a análise para `analise`
+  (sem re-analisar) — ou edital/aviso comum, em que `analise` fica null e o
+  checklist de documentos de habilitação é extraído do próprio edital para
+  `documentos_habilitacao` (nível raiz). É o que alimenta o botão "Anexar análise
+  (PDF)" e o cadastro manual: com análise, o card ganha classificação + checklist;
+  só com checklist, o cadastro cria uma análise mínima (só `documentos_habilitacao`,
+  sem scores/classificação, `status_analise` continua `manual`) para o módulo de
+  Documentação funcionar como no fluxo automático. O formato esperado do PDF de
+  relatório está em `docs/FORMATO-PDF-ANALISE.md`.
 - Saída estruturada: Pydantic (`ResultadoAnalise` etc.) validado pelo provedor
   (`response_schema` no Gemini; `messages.parse` no Claude).
 - `ErroCotaIA`: exceção de semântica especial — saldo/cota esgotada. O pipeline

@@ -41,6 +41,7 @@ export default function CadastroManual() {
   const [linkAuto, setLinkAuto] = useState('')
   const [pdfAuto, setPdfAuto] = useState(null)
   const [analiseExtraida, setAnaliseExtraida] = useState(null)
+  const [docsExtraidos, setDocsExtraidos] = useState(null)
   const [extraindo, setExtraindo] = useState(false)
   const [salvando, setSalvando] = useState(false)
   const [msg, setMsg] = useState('')
@@ -80,13 +81,18 @@ export default function CadastroManual() {
         observacoes: c.observacoes || f.observacoes,
       }))
       setAnaliseExtraida(c.analise || null)
+      const docsEdital = !c.analise && c.documentos_habilitacao?.length ? c.documentos_habilitacao : null
+      setDocsExtraidos(docsEdital)
       const nDocs = c.analise?.documentos_habilitacao?.length || 0
       setMsg(
         c.analise
           ? `✅ Campos preenchidos + análise importada (${c.analise.classificacao_final || 'sem classificação'}` +
             (nDocs ? `, ${nDocs} documentos de habilitação no checklist` : '') +
             ') — revise abaixo e clique em "Cadastrar licitação".'
-          : '✅ Campos preenchidos — revise abaixo e clique em "Cadastrar licitação".'
+          : docsEdital
+            ? `✅ Campos preenchidos + checklist de documentação extraído do edital ` +
+              `(${docsEdital.length} documentos) — revise abaixo e clique em "Cadastrar licitação".`
+            : '✅ Campos preenchidos — revise abaixo e clique em "Cadastrar licitação".'
       )
     } catch (e) {
       setMsg(
@@ -113,22 +119,27 @@ export default function CadastroManual() {
         valor_estimado: form.valor_estimado === '' ? null : Number(form.valor_estimado),
         edital_url: form.link,
         analise: analiseExtraida,
+        documentos_habilitacao: analiseExtraida ? null : docsExtraidos,
       })
       const identificada = dataBr(r.criado_em)
       const nDocs = analiseExtraida?.documentos_habilitacao?.length || 0
+      const nDocsEdital = !analiseExtraida ? (docsExtraidos?.length || 0) : 0
       setMsg(
         `✅ Licitação cadastrada (nº ${r.id_externo})` +
         (identificada ? ` — identificada em ${identificada}` : '') +
         ' — e adicionada ao Pipeline.' +
         (nDocs
           ? ` A análise foi importada com ${nDocs} documentos de habilitação — anexe-os pelo botão "docs" do cartão.`
-          : '')
+          : nDocsEdital
+            ? ` O checklist de documentação foi criado com ${nDocsEdital} documentos — anexe-os pelo botão "docs" do cartão.`
+            : '')
       )
       setForm(FORM_VAZIO)
       setResumo('')
       setLinkAuto('')
       setPdfAuto(null)
       setAnaliseExtraida(null)
+      setDocsExtraidos(null)
     } catch (e) {
       setMsg(
         e.message.includes('409')
@@ -160,7 +171,8 @@ export default function CadastroManual() {
         </label>
         <label>
           Ou anexe o PDF do edital ou da nossa análise do edital (até 19 MB) — tem prioridade sobre o resumo/link.
-          Se for a análise, o checklist de documentação e a classificação também são importados.
+          Se for a análise, o checklist de documentação e a classificação são importados; se for o
+          edital, o checklist de documentação é extraído dele.
           <input
             type="file"
             accept="application/pdf,.pdf"
@@ -193,6 +205,19 @@ export default function CadastroManual() {
               cartão, detalhes completos e checklist de documentação pronto para anexos.{' '}
               <button type="button" className="doc-excluir" title="Descartar a análise importada"
                 onClick={() => setAnaliseExtraida(null)}>descartar</button>
+            </p>
+          </div>
+        )}
+        {!analiseExtraida && docsExtraidos && (
+          <div className="analise-importada">
+            <strong>📋 Checklist de documentação extraído do edital</strong>
+            <p>{docsExtraidos.length} documentos de habilitação identificados.</p>
+            <p className="auto-dica">
+              Ao cadastrar, o controle de documentação é criado como no fluxo automático — o
+              checklist fica pronto para anexos no botão "docs" do cartão. A análise estratégica
+              (scores e classificação) não é feita.{' '}
+              <button type="button" className="doc-excluir" title="Descartar o checklist extraído"
+                onClick={() => setDocsExtraidos(null)}>descartar</button>
             </p>
           </div>
         )}
@@ -269,6 +294,7 @@ export default function CadastroManual() {
       <p className="auto-dica">
         O registro manual entra direto como oportunidade no Pipeline, sem passar pela análise IA.
         Se você anexou o PDF da nossa análise, ela é gravada junto — com checklist de documentação.
+        Se anexou o edital, o checklist de documentação é criado a partir dele.
       </p>
       <button className="primario" onClick={salvar} disabled={salvando || extraindo}>
         {salvando ? '⏳ Cadastrando…' : 'Cadastrar licitação'}
