@@ -5,6 +5,10 @@ Cadastro Manual (campo "anexe o PDF ... da nossa análise do edital"). Seguindo 
 formato, a importação preenche os campos do cadastro, grava a análise no card
 (classificação, scores, alertas) e cria o checklist de Documentação — sem erros.
 
+Este guia pode ser entregue **diretamente à IA que redige o relatório** (como anexo ou
+parte do prompt): as seções 1–5 são as regras e a seção 6 traz o modelo completo a
+preencher.
+
 ## 1. Requisitos do ARQUIVO (os que causam erro quando violados)
 
 | Requisito | Por quê |
@@ -108,7 +112,92 @@ REGRAS DE FORMATO DO RELATÓRIO (para importação no LicitaProsperaCRM):
    senha.
 ```
 
-## 6. O que acontece se o PDF fugir do formato
+## 6. Modelo completo do relatório (esqueleto para a IA preencher)
+
+Se este guia for lido por uma IA, ela deve produzir o relatório EXATAMENTE nesta
+estrutura e ordem, substituindo os `[colchetes]` pelos dados do edital (ou por
+`Não informado no edital`):
+
+```
+TABELAS DE DADOS DO CERTAME
+
+Tabela 1: Resumo do Certame
+| Parâmetro | Informação | Referência no Documento |
+| Nome do Certame | [objeto/título] | [item/página] |
+| Código/Número do Certame | [ex.: PE 45/2026] | [item/página] |
+| Modalidade | [ex.: Pregão Eletrônico] | [item/página] |
+| Órgão/Prefeitura | [órgão licitante] | [item/página] |
+| Cidade | [município] | [item/página] |
+| Estado (UF) | [sigla, ex.: SC] | [item/página] |
+| Quantidade de Beneficiários | [número] | [item/página] |
+| Valor Médio de Créditos/Mês | [R$ 0,00] | [item/página] |
+| Prazo do Contrato (meses) | [número] | [item/página] |
+| Valor Anual Estimado | [R$ 0,00] | [item/página] |
+| Valor Total Estimado | [R$ 0,00] | [item/página] |
+| Modelo de Crédito | [Pré-Pago / Pós-Pago] | [item/página] |
+| Arranjo de Pagamento | [Aberto / Fechado / Ambos] | [item/página] |
+| Taxa Administrativa | [%] | [item/página] |
+| Admite Taxa Negativa? | [Sim / Não] | [item/página] |
+| Exclusivo p/ Regime Societário? | [Não / Sim — qual] | [item/página] |
+| Personalização do Cartão | [Nome portador / Outro / Não exige] | [item/página] |
+| Custo Estimado Emissão Cartões | [Qtd × R$ 5,00 = R$ 0,00] | — |
+| Data Máx. Credenciamento | [DD/MM/AAAA] | [item/página] |
+| Data da Análise | [DD/MM/AAAA] | — |
+| Análise Preliminar de Credenciamento | [começar com "Viável." ou "Inviável."] | — |
+
+Tabela 2: Responsável pelo Certame
+| Contato | Detalhe |
+| Nome | [nome do pregoeiro/agente] |
+| Cargo/Função | [cargo] |
+| E-mail | [e-mail] |
+| Telefone | [telefone] |
+| Endereço | [endereço] |
+
+Tabela 3: Envio da Documentação
+| Item | Instrução |
+| Forma de Envio | [Portal/Site / E-mail / Correio / Presencial] |
+| Portal/Site (URL) | [https://…] |
+| E-mail para Envio | [e-mail] |
+| Endereço para Correio | [endereço] |
+| Aos Cuidados de | [nome] |
+
+TABELA DE DOCUMENTOS PARA HABILITAÇÃO
+| Categoria | Documento Exigido | Referência no Edital |
+| [uma das 5 categorias] | [um documento por linha] | [item/página] |
+| … (repetir para TODOS os documentos, sem agrupar) | | |
+
+RESUMO EXECUTIVO
+[texto]
+
+ANÁLISE PARA PROSPERA BENEFÍCIOS
+[Pontos Positivos, Pontos de Atenção, Riscos, Viabilidade Financeira/Operacional,
+Concorrentes, Score]
+
+ANÁLISE PARA PROSPERA PAGAMENTOS
+[Pontos Positivos, Pontos de Atenção, Riscos, Viabilidade Financeira/Operacional,
+Concorrentes, Score]
+
+OPORTUNIDADES ESTRATÉGICAS
+[texto]
+
+RISCOS JURÍDICOS E OPERACIONAIS
+[texto]
+
+ALERTAS DE IMPUGNAÇÃO
+[lista com fundamentação legal, ou "Não há necessidade de impugnação."]
+
+RECOMENDAÇÃO FINAL
+[texto]
+
+SCORE FINAL
+Prospera Benefícios: [X]/10
+Prospera Pagamentos: [Y]/10
+
+CLASSIFICAÇÃO FINAL
+[EXCELENTE OPORTUNIDADE | BOA OPORTUNIDADE | OPORTUNIDADE MODERADA | ALTO RISCO | NÃO RECOMENDADO]
+```
+
+## 7. O que acontece se o PDF fugir do formato
 
 | Situação | Comportamento do CRM |
 |---|---|
