@@ -29,6 +29,19 @@ def _job_pipeline():
         db.close()
 
 
+def _job_keep_alive():
+    # O ping à própria URL pública passa pelo proxy do Render e conta como tráfego
+    # externo — impede o spin-down do plano free. Falha não é fatal: enquanto o
+    # serviço estiver de pé o próximo ping tenta de novo; se hibernar, a coleta
+    # externa de 6h ou qualquer visita acorda o serviço e o ciclo retoma.
+    import httpx
+    url = settings.render_external_url.rstrip("/") + "/api/saude"
+    try:
+        httpx.get(url, timeout=30)
+    except Exception as exc:
+        logger.warning("Keep-alive falhou: %s", exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     Base.metadata.create_all(engine)
@@ -90,8 +103,9 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
     scheduler = None
-    if settings.coleta_intervalo_horas > 0:
+    if settings.coleta_intervalo_horas > 0 or settings.render_external_url:
         scheduler = BackgroundScheduler()
+    if settings.coleta_intervalo_horas > 0:
         # next_run_time: primeira coleta ~2 min após ligar (sem ela, a 1ª execução
         # só ocorreria após o intervalo cheio — e o PC raramente fica 6h ligado)
         scheduler.add_job(
@@ -99,9 +113,14 @@ async def lifespan(app: FastAPI):
             hours=settings.coleta_intervalo_horas,
             next_run_time=datetime.now() + timedelta(minutes=2),
         )
-        scheduler.start()
         logger.info("Coleta automática: primeira em ~2 min, depois a cada %sh",
                     settings.coleta_intervalo_horas)
+    if settings.render_external_url:
+        scheduler.add_job(_job_keep_alive, "interval", minutes=10)
+        logger.info("Keep-alive interno ativo: ping em %s a cada 10 min",
+                    settings.render_external_url)
+    if scheduler:
+        scheduler.start()
     yield
     if scheduler:
         scheduler.shutdown(wait=False)

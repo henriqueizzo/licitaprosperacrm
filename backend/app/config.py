@@ -52,5 +52,11 @@ class Settings(BaseSettings):
     # SPA em produção. Relativo ao diretório backend/. Em dev (sem dist) nada muda.
     frontend_dist: str = "../frontend/dist"
 
+    # URL pública do serviço — o Render injeta RENDER_EXTERNAL_URL automaticamente.
+    # Quando presente, o app se auto-pinga a cada 10 min para não hibernar no plano
+    # free (substitui o keep-alive do cron-job.org, que era desativado pela política
+    # de falhas consecutivas a cada instabilidade do Render). Vazio = sem keep-alive.
+    render_external_url: str = ""
+
 
 settings = Settings()
