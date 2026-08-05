@@ -67,10 +67,11 @@ admin/comum. O sistema roda 24/7 na nuvem (custo atual: R$ 0 — free tiers).
                        ┌─────────────────────────────────────────────┐
                        │                RENDER (free)                │
   cron-job.org ──────► │  FastAPI (uvicorn)                          │
-  (coleta 6/6h,        │  ├── /api/*  (JSON, sessão por cookie)      │ ◄──── Navegador
-   keep-alive 10min)   │  ├── SPA React (build Vite servido pelo     │       (SPA React)
+  (coleta 6/6h)        │  ├── /api/*  (JSON, sessão por cookie)      │ ◄──── Navegador
+                       │  ├── SPA React (build Vite servido pelo     │       (SPA React)
                        │  │    próprio FastAPI — same-origin)        │
-                       │  └── APScheduler (coleta agendada in-proc)  │
+                       │  └── APScheduler (coleta agendada in-proc   │
+                       │       + keep-alive: auto-ping 10min)        │
                        └───────┬──────────────┬──────────────────────┘
                                │              │
                     ┌──────────▼───┐   ┌──────▼───────────────────────┐
@@ -106,7 +107,7 @@ admin/comum. O sistema roda 24/7 na nuvem (custo atual: R$ 0 — free tiers).
 | Drag & drop | `@dnd-kit/core` | kanban |
 | Banco prod | Supabase Postgres (pooler session, porta 5432) | `psycopg2-binary` |
 | Hospedagem | Render free (blueprint `render.yaml`) | deploy automático via push no GitHub |
-| Cron externo | cron-job.org | coleta 6/6h + keep-alive 10min |
+| Cron externo | cron-job.org | coleta 6/6h (keep-alive é interno: auto-ping via `RENDER_EXTERNAL_URL`) |
 
 ### 3.3 Estrutura de pastas
 
@@ -454,9 +455,9 @@ de `GET /api/saude`.
 
 | Sintoma | Causa | Mitigação em vigor |
 |---|---|---|
-| "Tela preta"/página de loading do Render | Serviço hibernou (free tier dorme após inatividade) | job keep-alive no cron-job.org (GET / a cada 10 min; 744h/mês cabem nas 750h free) |
+| "Tela preta"/página de loading do Render | Serviço hibernou (free tier dorme após inatividade) | keep-alive INTERNO: APScheduler pinga `RENDER_EXTERNAL_URL/api/saude` a cada 10 min (main.py; 744h/mês cabem nas 750h free) |
 | Coletas falhando com Bad Gateway | Chamada chegou durante hibernação/instabilidade | timeout do job de coleta 60s + notificação por e-mail |
-| Keep-alive parou sozinho | cron-job.org **desativa** jobs após falhas consecutivas | notificações onFailure/onDisable ligadas (avisa por e-mail) |
+| Keep-alive externo parava sozinho | cron-job.org **desativava** jobs após falhas consecutivas (aconteceu 2x: 15/07 e ~04/08) | keep-alive migrado p/ dentro do app (08/2026); se hibernar mesmo assim, a coleta de 6h ou qualquer visita acorda e o auto-ping retoma |
 | Requisição interativa morre em ~100s | Proxy do Render corta requests longas | chamadas interativas de IA usam retries curtos; pipeline (background) usa retries longos |
 | Deploy "se perde" (push sem publicar) | Evento do Render não dispara às vezes | commit vazio (`git commit --allow-empty`) força novo deploy |
 | 500 intermitente após deploy | Requisição durante o swap | aguardar 1–2 min; conferir `/api/saude` |
@@ -467,9 +468,9 @@ usuário `postgres.<ref>`; senha com `@` precisa ser URL-encoded (`%40`);
 (aborta se o destino não estiver vazio).
 
 **cron-job.org**: job "Coleta LicitaProspera" (0/6/12/18h BRT, POST executar-cron
-com X-Cron-Token, timeout 60 s) e job "Manter LicitaProspera acordado" (10 min).
-Ambos com notificação de falha por e-mail. Gerenciáveis via API com a chave do
-usuário.
+com X-Cron-Token, timeout 60 s), com notificação de falha por e-mail. Gerenciável
+via API com a chave do usuário. O job "Manter LicitaProspera acordado" ficou
+obsoleto (keep-alive agora é interno ao app) — pode ser apagado no painel.
 
 **Custo atual**: R$ 0 (Render free + Supabase free + Gemini free + cron-job.org).
 Limitações correspondentes: hibernação, 512 MB RAM, ~20 análises/dia por modelo
