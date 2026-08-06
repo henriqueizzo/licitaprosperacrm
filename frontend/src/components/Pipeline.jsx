@@ -258,7 +258,17 @@ export default function Pipeline() {
     useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
   )
 
-  const carregar = () => api.oportunidades().then(setOps).catch((e) => setErro(e.message))
+  // Nº de sequência das buscas: uma resposta só aplica setOps se ainda for a mais
+  // recente — sem isso, a recarga de um movimento anterior (GET lento no plano
+  // free) chegava DEPOIS da atualização otimista do movimento seguinte e
+  // devolvia o cartão para a coluna antiga na tela
+  const buscaSeq = useRef(0)
+  const carregar = () => {
+    const seq = ++buscaSeq.current
+    return api.oportunidades()
+      .then((dados) => { if (seq === buscaSeq.current) setOps(dados) })
+      .catch((e) => setErro(e.message))
+  }
   useEffect(() => {
     carregar()
     api.licitacoes().then(setLics).catch(() => {})
@@ -297,14 +307,19 @@ export default function Pipeline() {
       })
 
   async function mudarEstagio(op, destino) {
-    // Atualização otimista: o cartão fica na coluna de destino enquanto a API responde
+    // Atualização otimista: o cartão fica na coluna de destino enquanto a API
+    // responde. Buscas em trânsito viram obsoletas (têm dados pré-movimento).
+    buscaSeq.current++
     setOps((prev) => prev.map((o) => (o.id === op.id ? { ...o, estagio: destino } : o)))
     try {
-      await api.moverOportunidade(op.id, destino)
+      // O PATCH devolve a oportunidade atualizada: reconcilia só esse cartão,
+      // sem recarregar a lista inteira (que era a fonte da corrida)
+      const atualizada = await api.moverOportunidade(op.id, destino)
+      setOps((prev) => prev.map((o) => (o.id === atualizada.id ? atualizada : o)))
     } catch (e) {
       window.alert(`Não foi possível mover: ${e.message}`)
+      carregar() // desfaz a atualização otimista com o estado real do servidor
     }
-    carregar()
   }
 
   async function mover(op, direcao) {
@@ -347,11 +362,12 @@ export default function Pipeline() {
 
   async function salvarResponsavel(op, nome) {
     try {
-      await api.atualizarOportunidade(op.id, { responsavel: nome })
+      const atualizada = await api.atualizarOportunidade(op.id, { responsavel: nome })
+      setOps((prev) => prev.map((o) => (o.id === atualizada.id ? atualizada : o)))
     } catch (e) {
       window.alert(`Não foi possível salvar o responsável: ${e.message}`)
+      carregar()
     }
-    carregar()
   }
 
   if (erro) return <p className="erro">Backend indisponível: {erro}</p>
