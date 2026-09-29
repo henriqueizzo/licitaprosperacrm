@@ -115,10 +115,12 @@ async def lifespan(app: FastAPI):
         )
         logger.info("Coleta automática: primeira em ~2 min, depois a cada %sh",
                     settings.coleta_intervalo_horas)
-    if settings.render_external_url:
+    if settings.render_external_url and settings.keep_alive:
         scheduler.add_job(_job_keep_alive, "interval", minutes=10)
         logger.info("Keep-alive interno ativo: ping em %s a cada 10 min",
                     settings.render_external_url)
+    elif settings.render_external_url:
+        logger.info("Keep-alive interno DESLIGADO (KEEP_ALIVE=false) — o servico pode hibernar")
     if scheduler:
         scheduler.start()
     yield

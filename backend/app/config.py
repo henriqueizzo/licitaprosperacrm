@@ -57,6 +57,11 @@ class Settings(BaseSettings):
     # free (substitui o keep-alive do cron-job.org, que era desativado pela política
     # de falhas consecutivas a cada instabilidade do Render). Vazio = sem keep-alive.
     render_external_url: str = ""
+    # Liga/desliga o auto-ping acima (env KEEP_ALIVE=true|false). O plano free do
+    # Render soma 750 h/mes para TODOS os servicos do workspace: cada servico
+    # mantido acordado 24h consome ~720 h, entao so UM pode ficar sempre ligado;
+    # estourar o limite suspende todos os servicos ate o mes virar.
+    keep_alive: bool = True
 
 
 settings = Settings()
