@@ -36,11 +36,14 @@ def saude():
     import os
 
     from ..analyzer import provedor_ativo
+    from ..services import gmail
     commit = os.environ.get("RENDER_GIT_COMMIT") or os.environ.get("APP_COMMIT", "")
     return {
         "ok": True,
         "ia_provider": provedor_ativo() or "nenhum",
         "commit": commit[:7],
+        # Leitura dos e-mails do Dario configurada? (só o booleano — sem segredos)
+        "gmail": gmail.configurado(),
     }
 
 
