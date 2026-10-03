@@ -44,6 +44,11 @@ class _Receptor(http.server.BaseHTTPRequestHandler):
 
     def do_GET(self):  # noqa: N802 (nome exigido pelo BaseHTTPRequestHandler)
         params = urllib.parse.parse_qs(urllib.parse.urlparse(self.path).query)
+        if "code" not in params and "error" not in params:
+            # favicon, pré-conexões do navegador etc.: ignora sem encerrar o fluxo
+            self.send_response(204)
+            self.end_headers()
+            return
         if params.get("state", [""])[0] != _Receptor.estado:
             _Receptor.erro = "state inválido (resposta não veio do fluxo iniciado aqui)"
         elif "code" in params:
@@ -69,7 +74,17 @@ def main() -> int:
 
     _Receptor.estado = secrets.token_urlsafe(16)
     servidor = http.server.HTTPServer(("localhost", PORTA), _Receptor)
-    threading.Thread(target=servidor.handle_request, daemon=True).start()
+    # Atende QUANTAS requisições chegarem até receber o código: o Chrome abre
+    # conexões especulativas (sem requisição) antes do clique em "Permitir", e um
+    # servidor de requisição única ficava preso nelas — o redirecionamento de
+    # verdade nunca era atendido. timeout curto no socket solta a conexão vazia.
+    servidor.timeout = 2
+
+    def _servir():
+        while not (_Receptor.codigo or _Receptor.erro):
+            servidor.handle_request()
+
+    threading.Thread(target=_servir, daemon=True).start()
 
     url = AUTH_URL + "?" + urllib.parse.urlencode({
         "client_id": args.client_id,
@@ -85,8 +100,6 @@ def main() -> int:
     if not args.sem_navegador:
         webbrowser.open(url)
     print(f"2) Aguardando a autorização em {REDIRECT} ...")
-    servidor.server_close() if False else None
-    # handle_request já está rodando na thread; espera o código chegar
     import time
     for _ in range(600):  # até 10 min
         if _Receptor.codigo or _Receptor.erro:

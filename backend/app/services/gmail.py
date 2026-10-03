@@ -40,9 +40,10 @@ def consulta_padrao(remetente: str | None = None, dias: int | None = None) -> st
     """Busca do Gmail: só os dois boletins, só do remetente, só na janela."""
     remetente = remetente or settings.emails_remetente
     dias = dias or settings.emails_janela_dias
+    # Entre aspas o Gmail casa palavras INTEIRAS ("Licita" não acha "Licitações")
     return (
         f"from:{remetente} newer_than:{dias}d "
-        '(subject:"Divulgador de editais" OR subject:"Alerta de Licita")'
+        '(subject:"Divulgador de editais" OR subject:"Alerta de Licitações" OR subject:"Alerta de Licitacoes")'
     )
 
 
