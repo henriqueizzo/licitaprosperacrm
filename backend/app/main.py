@@ -10,6 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .api.auth import router as auth_router
+from .api.emails import router as emails_router
 from .api.routes import cron_router, router
 from .config import settings
 from .database import Base, SessionLocal, engine, migrar_esquema
@@ -23,7 +24,8 @@ def _job_pipeline():
     from .services.pipeline import executar_pipeline
     db = SessionLocal()
     try:
-        resultado = executar_pipeline(db, gatilho="agendador")
+        # incluir_emails: os boletins do Dario entram no mesmo ciclo (Gmail configurado)
+        resultado = executar_pipeline(db, gatilho="agendador", incluir_emails=True)
         logger.info("Pipeline agendado executado: %s", resultado)
     finally:
         db.close()
@@ -144,6 +146,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(cron_router)
 app.include_router(router, dependencies=[Depends(usuario_atual)])
+app.include_router(emails_router, dependencies=[Depends(usuario_atual)])
 
 
 # ---------- Frontend (produção): serve o build do Vite pelo próprio FastAPI ----------

@@ -140,6 +140,23 @@ class ResultadoAnalise(BaseModel):
         return self
 
 
+class AvaliacaoItemEmail(BaseModel):
+    """Veredito da triagem de UM item de boletim de e-mail (aba "E-mails do Dario")."""
+
+    indice: int = Field(description="Índice do item na lista enviada (começa em 0)")
+    aderente: bool = Field(
+        description="true se a licitação adere ao perfil comercial da Prospera e deve entrar no pipeline"
+    )
+    score: int = Field(description="Aderência ao perfil, de 0 a 10")
+    motivo: str = Field(description="Justificativa objetiva em 1-2 frases, citando o trecho do objeto")
+
+
+class TriagemEmails(BaseModel):
+    """Saída da triagem em lote: um veredito por item, na ordem recebida."""
+
+    itens: list[AvaliacaoItemEmail]
+
+
 class ExtracaoCadastro(BaseModel):
     """Saída do preenchimento automático do Cadastro Manual.
 

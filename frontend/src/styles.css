@@ -1470,3 +1470,47 @@ button.primario:disabled { opacity: 0.5; cursor: wait; box-shadow: none; }
   border-color: var(--vermelho-texto, #b91c1c);
   color: var(--vermelho-texto, #b91c1c);
 }
+
+/* ---------- E-mails do Dario ---------- */
+/* Selo de origem nos cards/tabelas: licitação que veio de boletim encaminhado por e-mail */
+.selo-email {
+  display: inline-block; padding: 1px 8px; border-radius: 999px;
+  font-size: 0.64rem; font-weight: 600; white-space: nowrap; flex: none;
+  background: #ede9fe; color: #5b21b6; border: 1px solid #c4b5fd;
+}
+.cartao .selo-email { font-size: 0.6rem; }
+.emails-acoes { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 14px; }
+.emails-acoes .dica { font-size: 0.8rem; color: var(--texto-mudo); }
+.email-bloco {
+  background: var(--panel); border: 1px solid var(--linha); border-radius: var(--raio);
+  margin-bottom: 12px; overflow: hidden;
+}
+.email-cab { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; }
+.email-cab:hover { background: var(--panel-2); }
+.email-cab strong {
+  flex: 1; min-width: 0; font-size: 0.9rem; font-weight: 600; color: var(--texto);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.email-cab .email-data { font-size: 0.78rem; color: var(--texto-mudo); white-space: nowrap; font-weight: 600; }
+.email-seta { color: var(--texto-mudo); font-size: 0.8rem; }
+.email-resumo { display: flex; gap: 6px; flex-wrap: wrap; }
+.email-resumo .veredito { font-size: 0.66rem; padding: 2px 8px; }
+.selo-portal {
+  display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 0.66rem; font-weight: 700;
+  white-space: nowrap; background: var(--panel-2); color: var(--texto-suave); border: 1px solid var(--linha);
+}
+.selo-portal.bll { background: #ecfdf5; color: #065f46; border-color: #a7f3d0; }
+.selo-portal.pcp { background: #ecfeff; color: #155e75; border-color: #a5f3fc; }
+.email-itens .tabela { border: 0; border-radius: 0; border-top: 1px solid var(--linha); }
+.email-itens .docs-aviso { margin: 10px 16px; }
+.email-itens .objeto { max-width: 380px; font-size: 0.8rem; }
+.email-itens tr.linha-importada td:first-child { color: #065f46; }
+.email-itens .texto-mudo { color: var(--texto-mudo); font-size: 0.72rem; }
+.motivo-ia { display: block; font-size: 0.72rem; color: var(--texto-mudo); margin-top: 3px; max-width: 320px; line-height: 1.35; }
+.email-itens .acoes-linha .btn-docs { padding: 3px 8px; font-size: 0.72rem; text-decoration: none; }
+.colar-email textarea {
+  width: 100%; min-height: 280px; resize: vertical; font-family: var(--corpo); font-size: 0.85rem;
+  padding: 10px 12px; border: 1px solid var(--linha); border-radius: var(--raio-sm); color: var(--texto);
+}
+.colar-email textarea:focus { outline: none; border-color: var(--azul); box-shadow: var(--foco); }
+.colar-email .acoes { justify-content: flex-end; margin-top: 12px; }

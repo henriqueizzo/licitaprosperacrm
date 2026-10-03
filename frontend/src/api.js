@@ -29,9 +29,10 @@ const post = (body) => ({
   body: JSON.stringify(body),
 })
 
-// Polling de job de extração por PDF (a cada 3s, por até 10 min — com a cota
-// gratuita do Gemini congestionada a leitura pode passar de 7 min)
-async function aguardarExtracao(jobId) {
+// Polling de job em segundo plano (extração por PDF, sincronização de e-mails):
+// a cada 3s, por até 10 min — com a cota gratuita do Gemini congestionada a
+// leitura pode passar de 7 min
+async function aguardarExtracao(jobId, oQue = 'leitura do PDF') {
   const inicio = Date.now()
   while (Date.now() - inicio < 10 * 60 * 1000) {
     await new Promise((r) => setTimeout(r, 3000))
@@ -39,10 +40,10 @@ async function aguardarExtracao(jobId) {
     if (job.status === 'pronto') return job.resultado
     if (job.status === 'erro') {
       // Prefixa o código para os componentes distinguirem (ex.: 422 = PDF não é análise)
-      throw new Error(`${job.codigo || ''} ${job.erro || 'Falha na leitura do PDF'}`.trim())
+      throw new Error(`${job.codigo || ''} ${job.erro || `Falha na ${oQue}`}`.trim())
     }
   }
-  throw new Error('Tempo esgotado na leitura do PDF — tente novamente.')
+  throw new Error(`Tempo esgotado na ${oQue} — tente novamente.`)
 }
 
 export const api = {
@@ -112,6 +113,21 @@ export const api = {
   },
   excluirDocumento: (docId) => req(`/api/documentos/${docId}`, { method: 'DELETE' }),
   urlDownloadDocumento: (docId) => `/api/documentos/${docId}/download`,
+
+  // E-mails do Dario (boletins BLL / Portal de Compras Públicas)
+  emailsStatus: () => req('/api/emails/status'),
+  emails: () => req('/api/emails'),
+  // Lê o Gmail e tria (202 + job; polling como as extrações)
+  sincronizarEmails: async () => {
+    const { job_id } = await req('/api/emails/sincronizar', { method: 'POST' })
+    return aguardarExtracao(job_id, 'sincronização dos e-mails')
+  },
+  colarEmail: async (conteudo, assunto = '') => {
+    const { job_id } = await req('/api/emails/colar', post({ conteudo, assunto }))
+    return aguardarExtracao(job_id, 'leitura do e-mail')
+  },
+  importarItemEmail: (id) => req(`/api/emails/itens/${id}/importar`, { method: 'POST' }),
+  ignorarItemEmail: (id) => req(`/api/emails/itens/${id}/ignorar`, { method: 'POST' }),
 
   // Autenticação
   me: () => req('/api/auth/me'),

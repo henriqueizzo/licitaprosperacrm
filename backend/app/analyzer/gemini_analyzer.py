@@ -17,8 +17,23 @@ from google.genai import errors as genai_errors
 from google.genai import types as genai_types
 
 from ..config import settings
-from .prompts import SYSTEM_ANALISTA, SYSTEM_EXTRACAO, prompt_analise, prompt_extracao
-from .schemas import ErroCotaIA, ErroEntradaIA, ExtracaoCadastro, ResultadoAnalise, UsoIA
+from .prompts import (
+    SYSTEM_ANALISTA,
+    SYSTEM_EXTRACAO,
+    SYSTEM_TRIAGEM_EMAIL,
+    prompt_analise,
+    prompt_extracao,
+    prompt_triagem_email,
+)
+from .schemas import (
+    AvaliacaoItemEmail,
+    ErroCotaIA,
+    ErroEntradaIA,
+    ExtracaoCadastro,
+    ResultadoAnalise,
+    TriagemEmails,
+    UsoIA,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -156,6 +171,30 @@ class AnalisadorEditalGemini:
         if extracao.analise is not None:
             extracao.analise.normalizar()
         return extracao
+
+    def triar_emails(self, itens: list[dict], perfil: dict) -> list[AvaliacaoItemEmail]:
+        """Triagem em lote dos itens de um boletim de e-mail (aba "E-mails do Dario").
+
+        Uma chamada para N itens. Roda em segundo plano (job/agendador), então os
+        retries podem ser um pouco maiores que os das rotas interativas — mas sem
+        thinking: é classificação por metadados, não raciocínio longo.
+        """
+        if not itens:
+            return []
+        response = self._gerar_com_retry(
+            [prompt_triagem_email(perfil, itens)],
+            system=SYSTEM_TRIAGEM_EMAIL, schema=TriagemEmails, max_tokens=8000,
+            esperas_429=[20], esperas_5xx=[10], thinking_budget=0,
+        )
+        triagem = response.parsed
+        if triagem is None:
+            if not response.text:
+                raise RuntimeError("A IA não retornou a triagem (resposta vazia/bloqueada) — tente novamente.")
+            try:
+                triagem = TriagemEmails.model_validate_json(response.text)
+            except Exception as exc:
+                raise RuntimeError("A IA retornou uma triagem incompleta — tente novamente.") from exc
+        return triagem.itens
 
     def redigir(self, instrucao: str, system: str) -> str:
         """Gera texto corrido (sem schema) — usado p/ redigir declarações e afins.

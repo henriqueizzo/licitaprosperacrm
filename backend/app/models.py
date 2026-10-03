@@ -209,6 +209,75 @@ class ExecucaoPipeline(Base):
     avisos: Mapped[list | None] = mapped_column(JSON)
 
 
+class EmailRecebido(Base):
+    """Boletim de licitações encaminhado por e-mail (aba "E-mails do Dario").
+
+    O Dario encaminha dois boletins diários: "Divulgador de editais" (BLL Compras)
+    e "Alerta de Licitações" (Portal de Compras Públicas). Cada e-mail vira um
+    registro aqui e cada licitação citada nele vira um ItemEmail.
+
+    `gmail_id` é o id da mensagem na API do Gmail (único — impede reprocessar) ou
+    "colado-<hash>" quando o texto foi colado na tela em vez de lido do Gmail.
+    """
+
+    __tablename__ = "emails_recebidos"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    gmail_id: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    assunto: Mapped[str] = mapped_column(Text, default="")
+    remetente: Mapped[str] = mapped_column(Text, default="")
+    recebido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    tipo: Mapped[str] = mapped_column(String(20), default="desconhecido")  # bll | pcp | desconhecido
+    origem: Mapped[str] = mapped_column(String(20), default="gmail")        # gmail | colado
+    total_itens: Mapped[int] = mapped_column(Integer, default=0)
+    erro: Mapped[str] = mapped_column(Text, default="")
+    processado_em: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    itens: Mapped[list["ItemEmail"]] = relationship(
+        back_populates="email", cascade="all, delete-orphan", order_by="ItemEmail.ordem"
+    )
+
+
+class ItemEmail(Base):
+    """Uma licitação citada num boletim de e-mail e o que o agente decidiu sobre ela.
+
+    `situacao`:
+      novo            — ainda não avaliado
+      ja_na_base      — a coleta pública (PNCP/Sistema S) já tinha essa licitação
+      importada       — aderente ao perfil: virou Licitacao (fonte email_dario) + card
+      fora_do_perfil  — não aderente (UF fora do perfil ou veredito da IA)
+      aguardando_ia   — IA indisponível na hora; tenta na próxima sincronização
+      repetido        — mesma licitação já veio em e-mail anterior (decisão herdada)
+      ignorado        — descartado pelo time (ou excluído do pipeline)
+    `chave` identifica a licitação entre e-mails (portal + id do processo).
+    """
+
+    __tablename__ = "itens_email"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    email_id: Mapped[int] = mapped_column(ForeignKey("emails_recebidos.id"), index=True)
+    ordem: Mapped[int] = mapped_column(Integer, default=0)
+    chave: Mapped[str] = mapped_column(String(200), index=True, default="")
+    portal: Mapped[str] = mapped_column(String(60), default="")
+    orgao: Mapped[str] = mapped_column(Text, default="")
+    municipio: Mapped[str] = mapped_column(Text, default="")
+    uf: Mapped[str] = mapped_column(String(2), default="")
+    modalidade: Mapped[str] = mapped_column(Text, default="")
+    numero_certame: Mapped[str] = mapped_column(Text, default="")
+    objeto: Mapped[str] = mapped_column(Text, default="")
+    data_abertura: Mapped[str] = mapped_column(String(30), default="")      # ISO
+    data_encerramento: Mapped[str] = mapped_column(String(30), default="")  # ISO
+    link: Mapped[str] = mapped_column(Text, default="")
+    situacao: Mapped[str] = mapped_column(String(30), default="novo", index=True)
+    licitacao_id: Mapped[int | None] = mapped_column(ForeignKey("licitacoes.id"), nullable=True)
+    aderente: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    score_ia: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    motivo: Mapped[str] = mapped_column(Text, default="")
+    decidido_em: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    email: Mapped[EmailRecebido] = relationship(back_populates="itens")
+
+
 class PerfilEmpresa(Base):
     """Perfil da empresa usado pela IA para pontuar aderência (registro único, id=1)."""
 

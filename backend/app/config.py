@@ -63,5 +63,18 @@ class Settings(BaseSettings):
     # estourar o limite suspende todos os servicos ate o mes virar.
     keep_alive: bool = True
 
+    # ---- E-mails do Dario (aba "E-mails do Dario") ----
+    # Leitura da caixa do Gmail pela API oficial (OAuth 2.0, escopo SOMENTE LEITURA).
+    # As três credenciais saem de backend/scripts/autorizar_gmail.py (roda uma vez no
+    # PC, abre o navegador para autorizar e imprime o refresh token). Vazias = a aba
+    # funciona só com "Colar e-mail" (texto colado do Gmail).
+    gmail_client_id: str = ""
+    gmail_client_secret: str = ""
+    gmail_refresh_token: str = ""
+    # Quem encaminha os boletins (filtro from: da busca no Gmail)
+    emails_remetente: str = "dario.ribeiro@prosperapagamentos.com"
+    # Janela de busca (dias) — e-mails mais antigos que isso não são lidos
+    emails_janela_dias: int = 30
+
 
 settings = Settings()

@@ -22,7 +22,7 @@ const CORES_CLASSIFICACAO = {
   'NÃO RECOMENDADO': 'vermelho',
 }
 
-const FONTES = { pncp: 'PNCP', fiesc: 'FIESC', fiergs: 'FIERGS', fiems: 'FIEMS', manual: 'Cadastro manual' }
+const FONTES = { pncp: 'PNCP', fiesc: 'FIESC', fiergs: 'FIERGS', fiems: 'FIEMS', manual: 'Cadastro manual', email_dario: 'E-mail do Dario' }
 
 // aoMudar: callback do pai para recarregar a lista após editar/suspender/importar análise.
 // aoFechar: fecha o modal/linha após excluir (opcional).
@@ -145,6 +145,7 @@ export default function DetalhesLicitacao({ licitacao, aoMudar, aoFechar }) {
           </small>
         </div>
         <span className="detalhes-selos">
+          {l.fonte === 'email_dario' && <span className="selo-email" title="Veio de um boletim encaminhado pelo Dario">✉ Dario</span>}
           {l.suspensa && <span className="selo-suspensa">Suspensa</span>}
           {a?.classificacao_final && (
             <span className={`veredito ${CORES_CLASSIFICACAO[a.classificacao_final] || 'amarelo'}`}>

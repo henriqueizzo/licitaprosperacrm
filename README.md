@@ -10,8 +10,11 @@ CRM integrado a portais de licitações públicas com análise de editais por IA
 ## Fluxo
 
 ```
-Coletor (PNCP / ConLicitação / BLL) → Analisador IA (lê o edital PDF)
+Coletor (PNCP / Sistema S / ConLicitação) → Analisador IA (lê o edital PDF)
     → Score de aderência vs perfil da empresa → Pipeline de oportunidades (CRM)
+
+E-mails do Dario (boletins BLL / Portal de Compras Públicas, via Gmail ou colados)
+    → agente: já na base? aderente ao perfil? → card no pipeline com selo "✉ Dario"
 ```
 
 ## Perfil da empresa

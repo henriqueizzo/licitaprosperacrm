@@ -109,7 +109,10 @@ export default function Licitacoes() {
         {visiveis.map((l) => (
           <Fragment key={l.id}>
             <tr onClick={() => setAberta(aberta === l.id ? null : l.id)} className="linha">
-              <td>{l.orgao}</td>
+              <td>
+                {l.orgao}
+                {l.fonte === 'email_dario' && <> <span className="selo-email" title="Veio de um boletim encaminhado pelo Dario">✉ Dario</span></>}
+              </td>
               <td className="objeto">{l.objeto}</td>
               <td>{l.uf}</td>
               <td>{brl(l.valor_estimado)}</td>

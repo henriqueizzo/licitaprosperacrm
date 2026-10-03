@@ -148,6 +148,9 @@ function CartaoVisual({
         >
           {op.responsavel ? iniciais(op.responsavel) : '+'}
         </span>
+        {lic?.fonte === 'email_dario' && (
+          <span className="selo-email" title="Veio de um boletim encaminhado pelo Dario (aba E-mails do Dario)">✉ Dario</span>
+        )}
         {lic?.suspensa && <span className="selo-suspensa">Suspensa</span>}
         {prazo === 'prazo-vencida' && <span className="selo-vencida">Vencida</span>}
       </div>
@@ -398,7 +401,7 @@ export default function Pipeline() {
         <span className="tile-v">{lics === null ? '—' : lics.length}</span>
         <span className="tile-d">
           {lics === null
-            ? 'PNCP · FIESC · FIERGS · FIEMS · manual'
+            ? 'PNCP · FIESC · FIERGS · FIEMS · e-mails · manual'
             : `${abertas.length} em andamento · ${ganhas.length + perdidas.length} finalizadas`}
         </span>
       </div>

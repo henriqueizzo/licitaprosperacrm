@@ -49,7 +49,9 @@ def _pipeline_em_background(dias: int, limite_analises: int) -> None:
     from ..database import SessionLocal
     db = SessionLocal()
     try:
-        resultado = pipeline.executar_pipeline(db, dias=dias, limite_analises=limite_analises, gatilho="cron")
+        resultado = pipeline.executar_pipeline(
+            db, dias=dias, limite_analises=limite_analises, gatilho="cron", incluir_emails=True,
+        )
         logger.info("Pipeline via cron concluído: %s", resultado)
     except Exception:
         logger.exception("Pipeline via cron falhou")

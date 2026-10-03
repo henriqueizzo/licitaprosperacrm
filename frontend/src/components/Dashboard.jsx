@@ -34,7 +34,7 @@ const CLASSIFICACOES = {
   'SEM ANÁLISE': { rotulo: 'Sem análise', tom: 'cinza' },
 }
 
-const FONTES = { pncp: 'PNCP', fiesc: 'FIESC', fiergs: 'FIERGS', fiems: 'FIEMS', manual: 'Manual' }
+const FONTES = { pncp: 'PNCP', fiesc: 'FIESC', fiergs: 'FIERGS', fiems: 'FIEMS', manual: 'Manual', email_dario: 'E-mail do Dario' }
 
 const brlCompacto = (v) =>
   v == null || v === 0

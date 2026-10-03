@@ -445,3 +445,81 @@ def prompt_analise(perfil: dict, dados_licitacao: dict, tem_pdf: bool,
         "Prospera Pagamentos), no formato definido, preenchendo todos os campos estruturados."
     )
     return "\n".join(partes)
+
+
+# ---------------------------------------------------------------------------
+# Triagem dos boletins de e-mail (aba "E-mails do Dario")
+# ---------------------------------------------------------------------------
+# Decide, só com os metadados do aviso (sem edital), se a licitação merece entrar
+# no pipeline. Um lote por e-mail (1 chamada de IA para N itens): barato na cota
+# gratuita do Gemini e rápido. A análise completa do edital acontece depois, pelo
+# pipeline normal, só para o que foi importado.
+
+SYSTEM_TRIAGEM_EMAIL = """\
+Você faz a TRIAGEM de avisos de licitação recebidos por e-mail (boletins de portais
+como BLL Compras e Portal de Compras Públicas) para o Grupo Prospera (Prospera
+Benefícios + Prospera Pagamentos).
+
+Para cada item você recebe só o aviso (objeto, órgão, município/UF, modalidade,
+datas) — NÃO o edital. Decida se a licitação ADERE ao perfil comercial e merece
+entrar no pipeline do CRM para a análise completa do edital.
+
+ADERE (aderente=true) quando o objeto está em um destes segmentos:
+- Prospera Benefícios: vale-alimentação, vale-refeição, auxílio-alimentação, cartão
+  alimentação/refeição/benefício, cartões multibenefícios, benefícios flexíveis,
+  cartão social / auxílio em cartão (gestão de benefícios em cartão eletrônico ou
+  magnético), vale-feira, vale-combustível em cartão e similares — inclusive quando
+  descrito como "locação de software para administração/emissão de cartões de
+  vale-alimentação".
+- Prospera Pagamentos: adquirência, maquininhas/POS, gateway, TEF, link ou split de
+  pagamento, conta digital, arranjo/meio de pagamento eletrônico.
+
+NÃO ADERE (aderente=false) quando o objeto é serviço BANCÁRIO típico de banco —
+processamento ou cessão onerosa da folha de pagamento de servidores, arrecadação
+de tributos/DUAM, conta-corrente institucional, crédito consignado, aplicação
+financeira —, compra de alimentos/cestas em espécie, software sem emissão de cartões,
+ou qualquer outro objeto fora dos segmentos acima, mesmo que cite "instituição
+financeira" ou "instituição de pagamento".
+
+Regras:
+- As restrições cadastradas no perfil desclassificam (aderente=false) quando o aviso
+  deixa claro que esbarra nelas.
+- UF fora da atuação prioritária reduz o score, mas NÃO desclassifica sozinha (quando a
+  UF é critério de corte, o sistema já filtrou antes de chamar você).
+- Seja conservador em dúvida: aderente=true com score baixo (4-5) e motivo explicando
+  o que o edital precisa confirmar é melhor que perder uma oportunidade.
+- motivo: 1-2 frases em português, citando o trecho do objeto que decidiu.
+- Responda para TODOS os itens recebidos, na mesma ordem, usando o índice informado.
+"""
+
+
+def prompt_triagem_email(perfil: dict, itens: list[dict]) -> str:
+    """Monta o lote de itens de um boletim para a triagem."""
+    restricoes = "\n".join(f"- {r}" for r in (perfil.get("restricoes") or [])) or "- (nenhuma cadastrada)"
+    partes = [
+        f"Data de hoje: {date.today().strftime('%d/%m/%Y')}",
+        "",
+        "## PERFIL CADASTRADO NO CRM",
+        perfil.get("descricao", ""),
+        f"UFs de atuação prioritária: {', '.join(perfil.get('ufs') or []) or 'todas'}",
+        f"Palavras-chave de interesse: {', '.join(perfil.get('palavras_chave') or []) or '(nenhuma)'}",
+        "Restrições que desclassificam:",
+        restricoes,
+        "",
+        f"## ITENS DO BOLETIM ({len(itens)})",
+    ]
+    for i, item in enumerate(itens):
+        partes += [
+            f"### Item {i}",
+            f"Portal: {item.get('portal') or '-'}",
+            f"Órgão: {item.get('orgao') or '-'}",
+            f"Município/UF: {item.get('municipio') or '-'}/{item.get('uf') or '-'}",
+            f"Modalidade: {item.get('modalidade') or '-'}  Nº: {item.get('numero_certame') or '-'}",
+            f"Encerramento/sessão: {item.get('data_encerramento') or '-'}",
+            f"Objeto: {item.get('objeto') or '-'}",
+            "",
+        ]
+    partes.append(
+        "Avalie cada item e devolva um veredito por índice (aderente, score 0-10, motivo)."
+    )
+    return "\n".join(partes)

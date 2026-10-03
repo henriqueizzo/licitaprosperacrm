@@ -180,6 +180,9 @@ Lidas de `backend/.env` local ou das env vars do Render (`config.py`):
 | `CRON_TOKEN` | vazio | habilita `POST /api/pipeline/executar-cron` (vazio = rota desabilitada) |
 | `FRONTEND_DIST` | `../frontend/dist` | se existir, o FastAPI serve o SPA |
 | `CONLICITACAO_TOKEN` | vazio | auto-ativa o coletor ConLicitação quando chegar |
+| `GMAIL_CLIENT_ID` / `GMAIL_CLIENT_SECRET` / `GMAIL_REFRESH_TOKEN` | vazio | leitura da caixa do Gmail (aba E-mails do Dario, §3.9b); gerados por `scripts/autorizar_gmail.py`; vazios = só "Colar e-mail" |
+| `EMAILS_REMETENTE` | `dario.ribeiro@prosperapagamentos.com` | filtro `from:` da busca dos boletins |
+| `EMAILS_JANELA_DIAS` | 30 | janela de leitura dos e-mails |
 
 ### 3.5 Modelo de dados
 
@@ -198,6 +201,8 @@ Todas as tabelas são criadas por `Base.metadata.create_all` + `migrar_esquema()
 | `execucoes_pipeline` | Histórico de cada execução | `gatilho` (`manual\|agendador\|cron`), contadores, `avisos` (JSON — falhas de coletores) |
 | `perfil_empresa` | Perfil usado pela IA (registro único id=1) | palavras-chave da coleta, UFs, restrições, dados oficiais p/ declarações |
 | `eventos_uso` | Telemetria de uso (aba Atividade) | `tipo` controlado por código; rotas de listagem **não** geram evento |
+| `emails_recebidos` | Boletim encaminhado por e-mail (§3.9b) | `gmail_id` único (id da mensagem ou `colado-<hash>`), `tipo` (`bll\|pcp\|desconhecido`), `origem` (`gmail\|colado`), `erro` |
+| `itens_email` | Licitação citada num boletim + decisão do agente | `chave` (portal + id do processo, estável entre e-mails), `situacao` (`ja_na_base\|importada\|fora_do_perfil\|aguardando_ia\|repetido\|ignorado`), `licitacao_id`, `aderente`/`score_ia`/`motivo` |
 
 **Relações**: `Licitacao 1—1 Analise`, `Licitacao 1—1 Oportunidade`,
 `Licitacao 1—N DocumentoAnexo`. Exclusão de licitação apaga análise, card e
@@ -366,6 +371,56 @@ No startup, espelhos são apagados mantendo o mais trabalhado (estágio > docs >
 mexido > análise > mais antigo); grupo com mais de um card trabalhado por humano é
 pulado com warning. Na coleta, espelho novo é ignorado.
 
+### 3.9b E-mails do Dario (`services/emails.py`, `emails_parser.py`, `gmail.py`)
+
+O Dario (CEO) encaminha todo dia dois boletins para a caixa do coordenador:
+**"Divulgador de editais"** (BLL Compras, `avisos@bllcompras.com`) e **"Alerta de
+Licitações - PROSPERA..."** (Portal de Compras Públicas). A aba "E-mails do Dario"
+tem um agente que lê esses e-mails e decide o que entra no pipeline:
+
+```
+Gmail (API, só leitura)  ─┐
+                          ├─> parse determinístico (emails_parser) -> N itens
+"Colar e-mail" na tela ───┘            │
+        1. repetido?  (mesma chave em e-mail anterior -> herda a decisão)
+        2. ignorado?  (time já excluiu o card -> lápide em licitacoes_excluidas)
+        3. já na base? (coleta pública já tem: URL do portal | município/órgão +
+                        nº/ano | município/órgão + objeto equivalente)
+        4. UF fora das UFs do Perfil -> fora_do_perfil (sem gastar IA)
+        5. IA, UM lote por chamada (triar_emails): aderente -> importada
+           (Licitacao fonte "email_dario" + card Identificada + status pendente);
+           senão fora_do_perfil; IA indisponível -> aguardando_ia (tenta depois)
+```
+
+- **Parsers** (`emails_parser.py`): HTML ou texto colado viram LINHAS (links viram
+  `@@LINK url`) e um parser por portal interpreta as linhas — o texto colado do
+  Gmail (sem links) usa o mesmo caminho. Chave do item: `bll:UF:municipio:n/ano`
+  ou `pcp:<id do processo>` (do URL; sem URL, hash do objeto+órgão+data). Sem IA:
+  instantâneo e sem gastar cota. Amostras reais em `tests/test_emails_dario.py`.
+- **Gmail** (`gmail.py`): OAuth 2.0 `gmail.readonly` com refresh token (sem libs do
+  Google — 2 GETs e 1 POST via httpx). Credenciais pelo
+  `scripts/autorizar_gmail.py` (roda uma vez no PC, abre o navegador). Busca:
+  `from:<remetente> newer_than:<janela>d (subject:"Divulgador de editais" OR
+  subject:"Alerta de Licita")`. Sem credenciais, a aba funciona só com "Colar e-mail".
+- **Quando roda**: `executar_pipeline(..., incluir_emails=True)` lê o Gmail entre a
+  coleta e as análises (agendador de 6h e cron) — o que for importado já é analisado
+  no mesmo ciclo. O botão "Buscar e analisar agora" NÃO inclui (requisição síncrona
+  sob o corte de ~100s do proxy); a aba tem o botão próprio "Sincronizar Gmail agora"
+  (202 + job, polling em `/api/extracoes/{job_id}`).
+- **Card importado**: `fonte="email_dario"`, `sistema`=portal, `endereco_licitacao`=
+  link do processo, `status_analise="pendente"` → o pipeline analisa pelo link do
+  portal (regra de fonte da análise). Selo **"✉ Dario"** no kanban, na aba
+  Licitações e nos detalhes. Notas do card registram a origem e o motivo da triagem.
+- **Coleta enriquece, não duplica**: `executar_coleta` consulta
+  `licitacao_email_correspondente` antes de inserir; se a licitação do e-mail
+  aparecer no PNCP, `enriquecer_com_coleta` completa edital/valor/datas/razão
+  social no card existente e, com edital disponível pela primeira vez, apaga a
+  análise feita pelo link e volta a `pendente` para reanalisar com o PDF.
+- **Correção humana**: "Importar" força a entrada de um item fora do perfil (remove
+  a lápide se houver); "Ignorar" descarta. Decisões ficam no item (`motivo`).
+- Quota: 1 chamada de IA por e-mail (2/dia) — irrelevante para o limite diário do
+  Gemini. A triagem usa `thinking_budget=0` e retries moderados (roda em background).
+
 ### 3.10 API (rotas)
 
 Autenticação: cookie `sessao` (HttpOnly). Tudo em `/api/*` exige sessão válida,
@@ -394,6 +449,10 @@ Autenticação: cookie `sessao` (HttpOnly). Tudo em `/api/*` exige sessão váli
 | `/api/perfil` | GET/PUT | perfil da empresa (parâmetros da coleta/análise + dados p/ documentos) |
 | `/api/dashboard?dias=` | GET | KPIs, funil, coletas/dia, distribuições, vencimentos ≤14d |
 | `/api/admin/atividade` · `/eventos` | GET | resumo por usuário (com `uso_por_dia`) e eventos (admin) |
+| `/api/emails` · `/status` | GET | boletins processados (com itens e decisões) · Gmail configurado?, contagens por situação, última sincronização |
+| `/api/emails/sincronizar` | POST | lê o Gmail e tria (202 + job; 409 se o Gmail não estiver configurado) |
+| `/api/emails/colar` | POST | processa um boletim colado (HTML ou texto) — 202 + job; 409 se já processado, 422 se não for boletim |
+| `/api/emails/itens/{id}/importar` · `/ignorar` | POST | correção humana da triagem (importar força o card; ignorar descarta) |
 
 Convenções úteis para quem for mexer:
 - Serializadores centralizados em `routes.py` (`_licitacao_out`, `_analise_out`,
@@ -439,6 +498,10 @@ componentes e a navegação é por abas em `App.jsx`. Padrões:
     gerar declaração Word, anexar análise quando não há checklist.
   - `CadastroManual.jsx` — form + preenchimento automático (resumo/link/PDF) com
     prévia da análise importada.
+  - `EmailsDario.jsx` — aba dos boletins (§3.9b): cockpit (lidos, importadas, já na
+    base, fora do perfil), "Sincronizar Gmail agora" / "Colar e-mail" (job + polling),
+    lista de e-mails expansível com a decisão e o motivo de cada item, ações
+    Importar/Ignorar. Selo `.selo-email` ("✉ Dario") compartilhado com kanban/listas.
   - `Dashboard.jsx`, `Atividade.jsx` (horas de uso por dia), `Usuarios.jsx`,
     `Perfil.jsx`, `Janela.jsx` (modal reutilizável com minimizar/maximizar).
 - Busca/filtros são client-side (helpers em `Filtros.jsx`), sem acento
@@ -547,6 +610,12 @@ de `get_db` + `TestClient`; IA sempre mockada (nenhum teste consome cota).
     400 e memoriza o modelo (`_MODELOS_SEM_THINKING_BUDGET`); se o provedor
     rejeitar o PDF em si, `_extrair_com_reserva_de_texto` (routes.py) refaz a
     extração com o texto do pypdf. Parâmetro novo de IA = sempre prever o 400.
+15. **Fonte nova de licitação = checar a base antes de inserir e deixar a coleta
+    enriquecer depois** (§3.9b). A chave `(fonte, id_externo)` não pega a mesma
+    licitação vinda por canais diferentes (e-mail do portal vs PNCP); o casamento é
+    por URL do portal, município/órgão + nº/ano ou objeto equivalente (aceita o
+    objeto truncado com "..."). Parse de e-mail é determinístico — IA só para a
+    decisão de aderência, em lote.
 
 ### 3.16 Sugestões de evolução (backlog técnico)
 

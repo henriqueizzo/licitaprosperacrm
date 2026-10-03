@@ -12,14 +12,23 @@ import logging
 import anthropic
 
 from ..config import settings
-from .prompts import SYSTEM_ANALISTA, SYSTEM_EXTRACAO, prompt_analise, prompt_extracao
+from .prompts import (
+    SYSTEM_ANALISTA,
+    SYSTEM_EXTRACAO,
+    SYSTEM_TRIAGEM_EMAIL,
+    prompt_analise,
+    prompt_extracao,
+    prompt_triagem_email,
+)
 from .schemas import (  # noqa: F401 (reexport legado)
     CLASSIFICACOES,
+    AvaliacaoItemEmail,
     CamposLicitacao,
     ErroCotaIA,
     ErroEntradaIA,
     ExtracaoCadastro,
     ResultadoAnalise,
+    TriagemEmails,
 )
 
 logger = logging.getLogger(__name__)
@@ -142,6 +151,27 @@ class AnalisadorEdital:
         if extracao.analise is not None:
             extracao.analise.normalizar()
         return extracao
+
+    def triar_emails(self, itens: list[dict], perfil: dict) -> list[AvaliacaoItemEmail]:
+        """Triagem em lote dos itens de um boletim de e-mail (aba "E-mails do Dario")."""
+        if not itens:
+            return []
+        try:
+            response = self.client.messages.parse(
+                model=settings.claude_model,
+                max_tokens=8000,
+                system=SYSTEM_TRIAGEM_EMAIL,
+                messages=[{"role": "user", "content": prompt_triagem_email(perfil, itens)}],
+                output_format=TriagemEmails,
+            )
+        except anthropic.BadRequestError as exc:
+            if "credit balance" in str(exc.message).lower():
+                raise ErroCotaIA("Créditos da API Anthropic esgotados.") from exc
+            raise
+        except anthropic.RateLimitError as exc:
+            raise ErroCotaIA("Rate limit da API Anthropic persistente.") from exc
+        triagem: TriagemEmails = response.parsed_output
+        return triagem.itens
 
     def redigir(self, instrucao: str, system: str) -> str:
         """Gera texto corrido (sem schema) — usado p/ redigir declarações e afins."""

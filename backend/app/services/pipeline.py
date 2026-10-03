@@ -68,6 +68,14 @@ def executar_coleta(db: Session, dias: int = 3) -> dict:
             "Cadastre as palavras-chave na aba Perfil."
         )
 
+    # Cards vindos dos e-mails do Dario: se a mesma licitação aparecer agora na fonte
+    # pública, o card é enriquecido (edital, valor, datas) em vez de duplicado.
+    from .emails import FONTE_EMAIL, enriquecer_com_coleta, licitacao_email_correspondente
+    tem_cards_de_email = db.execute(
+        select(Licitacao.id).where(Licitacao.fonte == FONTE_EMAIL).limit(1)
+    ).first() is not None
+    enriquecidas = 0
+
     for coletor in coletores_ativos(settings):
         try:
             coletadas = coletor.coletar(ufs, palavras, dias=dias)
@@ -106,6 +114,12 @@ def executar_coleta(db: Session, dias: int = 3) -> dict:
                 logger.info("Espelho ignorado na coleta: %s %s é espelho da licitação #%s",
                             c.fonte, c.id_externo, gemea.id)
                 continue
+            if tem_cards_de_email:
+                do_email = licitacao_email_correspondente(db, c)
+                if do_email is not None:
+                    enriquecer_com_coleta(db, do_email, c)
+                    enriquecidas += 1
+                    continue
             lic = Licitacao(
                 fonte=c.fonte, id_externo=c.id_externo, orgao=c.orgao, municipio=c.municipio,
                 uf=c.uf, modalidade=c.modalidade, objeto=c.objeto, valor_estimado=c.valor_estimado,
@@ -122,6 +136,8 @@ def executar_coleta(db: Session, dias: int = 3) -> dict:
     resultado = {"novas_licitacoes": novas}
     if espelhos_ignorados:
         resultado["espelhos_ignorados"] = espelhos_ignorados
+    if enriquecidas:
+        resultado["cards_de_email_enriquecidos"] = enriquecidas
     if avisos:
         resultado["avisos"] = avisos
     return resultado
@@ -162,9 +178,10 @@ def executar_analises(db: Session, limite: int = 10, licitacao_ids: list[int] | 
     avisos: list[str] = []
     for lic in pendentes:
         pdf = None
-        if lic.fonte == "pncp" and lic.edital_url:
+        if lic.edital_url and (lic.fonte == "pncp" or "pncp.gov.br/pncp-api" in lic.edital_url):
             # TODOS os arquivos (edital + TR + anexos) — os documentos de
-            # habilitação costumam estar nos anexos, não no arquivo principal
+            # habilitação costumam estar nos anexos, não no arquivo principal.
+            # Vale também para cards de e-mail enriquecidos pela coleta do PNCP.
             pdf = PNCPCollector.baixar_documentos(lic.edital_url) or None
         elif lic.fonte == "manual" and lic.edital_url:
             pdf = _baixar_pdf_direto(lic.edital_url)
@@ -242,12 +259,35 @@ def executar_analises(db: Session, limite: int = 10, licitacao_ids: list[int] | 
 
 
 def executar_pipeline(db: Session, dias: int = 3, limite_analises: int = 10,
-                      gatilho: str = "manual") -> dict:
+                      gatilho: str = "manual", incluir_emails: bool = False) -> dict:
+    """Coleta -> (e-mails do Dario) -> análises.
+
+    `incluir_emails` lê os boletins do Gmail entre a coleta e as análises, para o
+    que for importado já ser analisado no mesmo ciclo. Fica desligado no botão
+    manual da tela (requisição síncrona sob o corte de ~100s do proxy) e ligado
+    no agendador e no cron.
+    """
     coleta = executar_coleta(db, dias=dias)
+    emails: dict = {}
+    if incluir_emails:
+        from . import gmail
+        from .emails import sincronizar_gmail
+        if gmail.configurado():
+            try:
+                emails = sincronizar_gmail(db)
+            except Exception as exc:  # Gmail fora do ar não pode derrubar a coleta
+                logger.warning("Sincronização dos e-mails do Dario falhou: %s", exc)
+                emails = {"avisos": [f"E-mails do Dario: {exc}"]}
+            else:
+                if emails.get("aviso"):
+                    emails["avisos"] = [f"E-mails do Dario: {emails['aviso']}"]
     analises = executar_analises(db, limite=limite_analises)
-    # Avisos vêm das duas etapas — junta as listas (o merge de dicts sobrescreveria)
-    avisos = list(coleta.get("avisos") or []) + list(analises.get("avisos") or [])
+    # Avisos vêm das etapas — junta as listas (o merge de dicts sobrescreveria)
+    avisos = (list(coleta.get("avisos") or []) + list(emails.get("avisos") or [])
+              + list(analises.get("avisos") or []))
     resultado = {**coleta, **analises}
+    if emails:
+        resultado["emails"] = {k: v for k, v in emails.items() if k != "avisos"}
     # Oportunidades agora nascem na coleta (1 por licitação nova); a análise só
     # cria as defensivas de registros antigos — soma as duas origens no contador.
     resultado["oportunidades_criadas"] = (
